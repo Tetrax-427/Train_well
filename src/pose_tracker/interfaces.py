@@ -1,0 +1,93 @@
+from __future__ import annotations
+
+from collections.abc import Sequence
+from datetime import datetime
+from pathlib import Path
+from typing import Protocol
+
+import numpy as np
+
+from pose_tracker.domain.frame import Frame
+from pose_tracker.domain.history import RepRecord, SessionSummary, StoredSession
+from pose_tracker.domain.pose import Pose
+
+
+class FrameSource(Protocol):
+    def read(self) -> Frame | None:
+        """Return the next frame, or None when the source is exhausted/failed."""
+
+    def close(self) -> None: ...
+
+
+class PoseEstimator(Protocol):
+    def estimate(self, frame: Frame) -> Pose | None:
+        """Return the tracked person's pose, or None if nobody is detected."""
+
+    def close(self) -> None: ...
+
+
+class PoseAnalyzer(Protocol):
+    def analyze(
+        self, pose: Pose | None, timestamp_ms: int, aspect_ratio: float
+    ) -> Sequence[str]:
+        """Analyze the pose and return text lines to overlay on the frame."""
+
+
+class PoseRenderer(Protocol):
+    def render(
+        self,
+        image: np.ndarray,
+        pose: Pose | None,
+        fps: float,
+        status_lines: Sequence[str] = (),
+    ) -> np.ndarray:
+        """Return a new image with the pose and status text drawn on it."""
+
+
+class FrameDisplay(Protocol):
+    def show(self, image: np.ndarray) -> bool:
+        """Display the image. Return False when the user asked to stop."""
+
+    def close(self) -> None: ...
+
+
+class FrameObserver(Protocol):
+    def observe(self, frame: Frame) -> None:
+        """Called by the pipeline with every frame, before analysis."""
+
+
+class FrameEncoder(Protocol):
+    def encode(self, image: np.ndarray) -> bytes | None:
+        """Return the image as JPEG bytes, or None if encoding failed."""
+
+
+class SnapshotSource(Protocol):
+    def nearest(self, timestamp_ms: int) -> bytes | None:
+        """JPEG of the frame closest to the timestamp, or None if none is close enough."""
+
+
+class SnapshotStore(Protocol):
+    def save(self, session_id: int, name: str, jpeg: bytes) -> str:
+        """Store the image and return its key."""
+
+    def resolve(self, key: str) -> Path: ...
+
+    def delete_session(self, session_id: int) -> None: ...
+
+
+class SessionWriter(Protocol):
+    def start_session(
+        self, exercise_key: str, exercise_name: str, started_at: datetime
+    ) -> int: ...
+
+    def add_rep(self, session_id: int, rep: RepRecord) -> None: ...
+
+    def finish_session(self, session_id: int, ended_at: datetime) -> None: ...
+
+
+class SessionReader(Protocol):
+    def list_sessions(self, exercise_key: str | None = None) -> list[SessionSummary]: ...
+
+    def get_session(self, session_id: int) -> StoredSession | None: ...
+
+    def delete_session(self, session_id: int) -> None: ...
