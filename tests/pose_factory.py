@@ -184,3 +184,48 @@ def deadlift_pose(
     for landmark_id, (x, y) in placements.items():
         landmarks[landmark_id] = Landmark(x, y, 0.0, 1.0)
     return Pose(tuple(landmarks))
+def curl_pose(
+    elbow_angle_deg: float,
+    upper_arm_deg: float = 5.0,
+    layback_deg: float = 0.0,
+    facing: int = 1,
+) -> Pose:
+    """Left-side standing lifter. facing: +1 = faces image-right, -1 = image-left.
+
+    upper_arm_deg: angle at the shoulder between the torso and the upper arm.
+    layback_deg: > 0 leans the torso back, < 0 forward.
+    """
+    torso, upper, fore, thigh, shin = 0.30, 0.15, 0.15, 0.25, 0.25
+
+    hip = (0.5, 0.40)
+    layback = math.radians(layback_deg)
+    shoulder = (hip[0] - facing * torso * math.sin(layback), hip[1] - torso * math.cos(layback))
+
+    # Directions are measured from straight down, toward the way the person faces.
+    upper_dir = layback + math.radians(upper_arm_deg)
+    elbow = (
+        shoulder[0] + facing * upper * math.sin(upper_dir),
+        shoulder[1] + upper * math.cos(upper_dir),
+    )
+    fore_dir = upper_dir + math.radians(180.0 - elbow_angle_deg)
+    wrist = (
+        elbow[0] + facing * fore * math.sin(fore_dir),
+        elbow[1] + fore * math.cos(fore_dir),
+    )
+
+    knee = (hip[0], hip[1] + thigh)
+    ankle = (knee[0], knee[1] + shin)
+    heel = (ankle[0] - facing * 0.03, ankle[1] + 0.02)
+    toe = (ankle[0] + facing * 0.08, ankle[1] + 0.02)
+
+    landmarks = [Landmark(0.5, 0.5, 0.0, 1.0)] * 33
+    placements = {
+        LandmarkId.LEFT_SHOULDER: shoulder, LandmarkId.RIGHT_SHOULDER: shoulder,
+        LandmarkId.LEFT_HIP: hip, LandmarkId.RIGHT_HIP: hip,
+        LandmarkId.LEFT_ELBOW: elbow, LandmarkId.LEFT_WRIST: wrist,
+        LandmarkId.LEFT_KNEE: knee, LandmarkId.LEFT_ANKLE: ankle,
+        LandmarkId.LEFT_HEEL: heel, LandmarkId.LEFT_FOOT_INDEX: toe,
+    }
+    for landmark_id, (x, y) in placements.items():
+        landmarks[landmark_id] = Landmark(x, y, 0.0, 1.0)
+    return Pose(tuple(landmarks))

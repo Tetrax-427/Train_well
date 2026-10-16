@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import pytest
-from pose_factory import squat_pose, press_pose, pushup_pose, deadlift_pose
-
+from pose_factory import squat_pose, press_pose, pushup_pose, deadlift_pose, curl_pose
 from pose_tracker.domain.body_side import BodySide
 from pose_tracker.domain.features import compute_features
 from pose_tracker.domain.pose import Landmark, LandmarkId, Pose
+
 
 
 def test_knee_angle_and_torso_lean() -> None:
@@ -89,3 +89,11 @@ def test_deadlift_features(facing: int) -> None:
     assert f.torso_thigh_ratio == pytest.approx(0.30 * 0.9 / 0.25)
     assert f.bar_offset == pytest.approx(0.25)
     assert f.neck_angle == pytest.approx(165)
+
+@pytest.mark.parametrize("facing", [1, -1])
+def test_curl_features(facing: int) -> None:
+    pose = curl_pose(90, upper_arm_deg=20, layback_deg=8, facing=facing)
+    f = compute_features(pose, BodySide.LEFT, 1.0, 0.5)
+    assert f.elbow_angle == pytest.approx(90)
+    assert f.upper_arm_angle == pytest.approx(20)
+    assert f.torso_layback_deg == pytest.approx(8)
