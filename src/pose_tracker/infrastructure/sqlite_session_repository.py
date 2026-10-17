@@ -20,10 +20,11 @@ from pose_tracker.domain.history import (
 from pose_tracker.domain.pose import Landmark, Pose
 from pose_tracker.errors import PersistenceError
 from pose_tracker.interfaces import SnapshotStore
+from pose_tracker.domain.progress import ProgressEntry, ProgressSet
 
 logger = logging.getLogger(__name__)
 
-_SCHEMA_VERSION = 1
+_SCHEMA_VERSION = 2
 
 _SCHEMA = f"""
 CREATE TABLE sessions (
@@ -31,7 +32,10 @@ CREATE TABLE sessions (
     exercise_key TEXT NOT NULL,
     exercise_name TEXT NOT NULL,
     started_at TEXT NOT NULL,
-    ended_at TEXT
+    ended_at TEXT,
+    progress_saved INTEGER NOT NULL DEFAULT 0,
+    progress_reps INTEGER,
+    progress_weight_kg REAL
 );
 CREATE TABLE reps (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -57,18 +61,31 @@ CREATE TABLE violations (
 CREATE INDEX idx_sessions_started ON sessions(started_at);
 CREATE INDEX idx_reps_session ON reps(session_id);
 CREATE INDEX idx_violations_rep ON violations(rep_id);
+CREATE INDEX idx_sessions_progress ON sessions(exercise_key, progress_saved, started_at);
 PRAGMA user_version = {_SCHEMA_VERSION};
 """
 
 # A rep is clean when it has no violations; counts are derived, never stored.
 _SUMMARY_SQL = """
 SELECT s.id, s.exercise_key, s.exercise_name, s.started_at, s.ended_at,
+       s.progress_saved, s.progress_reps, s.progress_weight_kg,
        (SELECT COUNT(*) FROM reps r WHERE r.session_id = s.id) AS total_reps,
        (SELECT COUNT(*) FROM reps r WHERE r.session_id = s.id
           AND NOT EXISTS (SELECT 1 FROM violations v WHERE v.rep_id = r.id)) AS clean_reps
 FROM sessions s
 """
 
+_PROGRESS_SQL = (
+    "SELECT id, exercise_key, exercise_name, started_at, progress_reps, progress_weight_kg"
+    " FROM sessions"
+)
+
+_V1_TO_V2 = (
+    "ALTER TABLE sessions ADD COLUMN progress_saved INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE sessions ADD COLUMN progress_reps INTEGER",
+    "ALTER TABLE sessions ADD COLUMN progress_weight_kg REAL",
+    "CREATE INDEX idx_sessions_progress ON sessions(exercise_key, progress_saved, started_at)",
+)
 
 class SqliteSessionRepository:
     """Implements SessionWriter and SessionReader on SQLite, with snapshots in a SnapshotStore.
@@ -186,6 +203,51 @@ class SqliteSessionRepository:
             db.execute("DELETE FROM sessions WHERE id = ?", (session_id,))
         self._snapshots.delete_session(session_id)
 
+
+        # -- progress --------------------------------------------------------------------
+
+    def save_progress(self, session_id: int, entry: ProgressEntry) -> None:
+        with self._db() as db:
+            cursor = db.execute(
+                "UPDATE sessions SET progress_saved = 1, progress_reps = ?,"
+                " progress_weight_kg = ? WHERE id = ?",
+                (entry.reps, entry.weight_kg, session_id),
+            )
+            if cursor.rowcount == 0:
+                raise PersistenceError(f"Session {session_id} no longer exists")
+
+    def remove_progress(self, session_id: int) -> None:
+        with self._db() as db:
+            db.execute(
+                "UPDATE sessions SET progress_saved = 0, progress_reps = NULL,"
+                " progress_weight_kg = NULL WHERE id = ?",
+                (session_id,),
+            )
+
+    def list_progress_sets(
+        self, exercise_key: str, since: datetime | None = None
+    ) -> list[ProgressSet]:
+        sql = _PROGRESS_SQL + " WHERE progress_saved = 1 AND exercise_key = ?"
+        params: list[str] = [exercise_key]
+        if since is not None:
+            sql += " AND started_at >= ?"
+            params.append(_iso(since))
+        sql += " ORDER BY started_at, id"
+        with self._db() as db:
+            rows = db.execute(sql, params).fetchall()
+        return [_progress_set(row) for row in rows]
+
+    def latest_progress_day(self, exercise_key: str) -> list[ProgressSet]:
+        with self._db() as db:
+            rows = db.execute(
+                _PROGRESS_SQL + " WHERE progress_saved = 1 AND exercise_key = ?"
+                " AND date(started_at) = (SELECT MAX(date(started_at)) FROM sessions"
+                " WHERE progress_saved = 1 AND exercise_key = ?)"
+                " ORDER BY started_at, id",
+                (exercise_key, exercise_key),
+            ).fetchall()
+        return [_progress_set(row) for row in rows]
+
     def close(self) -> None:
         with self._lock:
             self._conn.close()
@@ -194,12 +256,26 @@ class SqliteSessionRepository:
 
     def _migrate(self) -> None:
         version = self._conn.execute("PRAGMA user_version").fetchone()[0]
-        if version == 0:
-            self._conn.executescript(_SCHEMA)
-        elif version > _SCHEMA_VERSION:
+        if version > _SCHEMA_VERSION:
             raise PersistenceError(
                 f"History database is version {version}; this app supports up to {_SCHEMA_VERSION}"
             )
+        if version == 0:
+            self._conn.executescript(_SCHEMA)
+        elif version == 1:
+            self._upgrade_v1_to_v2()
+
+    def _upgrade_v1_to_v2(self) -> None:
+        """All-or-nothing: a failure leaves the database as version 1."""
+        try:
+            self._conn.execute("BEGIN")
+            for statement in _V1_TO_V2:
+                self._conn.execute(statement)
+            self._conn.execute("PRAGMA user_version = 2")
+            self._conn.commit()
+        except sqlite3.Error:
+            self._conn.rollback()
+            raise
 
     @contextmanager
     def _db(self) -> Iterator[sqlite3.Connection]:
@@ -264,8 +340,23 @@ def _summary(row: sqlite3.Row) -> SessionSummary:
         ended_at=datetime.fromisoformat(row["ended_at"]) if row["ended_at"] else None,
         total_reps=row["total_reps"],
         clean_reps=row["clean_reps"],
+        progress=(
+            ProgressEntry(row["progress_reps"], row["progress_weight_kg"])
+            if row["progress_saved"]
+            else None
+        ),
     )
 
+
+def _progress_set(row: sqlite3.Row) -> ProgressSet:
+    return ProgressSet(
+        session_id=row["id"],
+        exercise_key=row["exercise_key"],
+        exercise_name=row["exercise_name"],
+        performed_at=datetime.fromisoformat(row["started_at"]),
+        reps=row["progress_reps"],
+        weight_kg=row["progress_weight_kg"],
+    )
 
 def _encode_pose(pose: Pose) -> str:
     return json.dumps(

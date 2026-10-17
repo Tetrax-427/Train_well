@@ -10,6 +10,7 @@ import numpy as np
 from pose_tracker.domain.frame import Frame
 from pose_tracker.domain.history import RepRecord, SessionSummary, StoredSession
 from pose_tracker.domain.pose import LandmarkId, Pose
+from pose_tracker.domain.progress import ProgressEntry, ProgressSet
 
 
 class FrameSource(Protocol):
@@ -118,3 +119,20 @@ class SnapshotPainter(Protocol):
 
         ``ghost`` is called with the image's aspect ratio. None if the file is unreadable.
         """
+
+
+class ProgressWriter(Protocol):
+    def save_progress(self, session_id: int, entry: ProgressEntry) -> None:
+        """Mark the session as saved to progress, or update its saved reps and weight."""
+
+    def remove_progress(self, session_id: int) -> None: ...
+
+
+class ProgressReader(Protocol):
+    def list_progress_sets(
+        self, exercise_key: str, since: datetime | None = None
+    ) -> list[ProgressSet]:
+        """Saved sets of one exercise from ``since`` on, oldest first."""
+
+    def latest_progress_day(self, exercise_key: str) -> list[ProgressSet]:
+        """All saved sets of the most recent day that has any, oldest first."""
