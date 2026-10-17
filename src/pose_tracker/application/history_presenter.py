@@ -11,6 +11,7 @@ from pose_tracker.domain.history import SessionSummary, StoredSession, StoredVio
 from pose_tracker.domain.pose import LandmarkId, Pose
 from pose_tracker.domain.rule_joints import highlighted_landmarks
 from pose_tracker.interfaces import GhostFactory, ReferenceProvider, SessionReader
+from pose_tracker.domain.progress import ProgressEntry
 _BASE_LANDMARKS = 33  # the model's own landmarks; derived ones (neck, ...) come after
 
 
@@ -50,6 +51,9 @@ class SessionDetail:
     stats_text: str
     mistakes: tuple[MistakeCardData, ...]
     reps: tuple[RepRowData, ...]
+    exercise_key: str
+    total_reps: int
+    progress: ProgressEntry | None
 
 
 class HistoryPresenter:
@@ -80,14 +84,14 @@ class HistoryPresenter:
 
 
 def _row(summary: SessionSummary) -> SessionRow:
+    saved = " · in Progress" if summary.progress is not None else ""
     return SessionRow(
         session_id=summary.session_id,
         title=summary.exercise_name,
         subtitle=(
-            f"{_when(summary)} · {_reps(summary.total_reps)} · {summary.clean_reps} clean"
+            f"{_when(summary)} · {_reps(summary.total_reps)} · {summary.clean_reps} clean{saved}"
         ),
     )
-
 
 def _detail(stored: StoredSession, references: ReferenceProvider) -> SessionDetail:
     summary = stored.summary
@@ -124,6 +128,10 @@ def _detail(stored: StoredSession, references: ReferenceProvider) -> SessionDeta
         stats_text=" · ".join(parts),
         mistakes=mistakes,
         reps=reps,
+        exercise_key=summary.exercise_key,
+        total_reps=summary.total_reps,
+        progress=summary.progress,
+    
     )
 
 

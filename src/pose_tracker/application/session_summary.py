@@ -32,7 +32,9 @@ class SummaryState:
     clean_reps: int
     rows: tuple[RepRow, ...]
     mistakes: tuple[MistakeTally, ...]  # most frequent first
-
+    exercise_key: str = ""
+    session_id: int | None = None  # history id; None if nothing was persisted
+    
     @property
     def issue_reps(self) -> int:
         return self.total_reps - self.clean_reps
@@ -79,4 +81,6 @@ def build_summary(report: SessionReport) -> SummaryState:
         clean_reps=report.clean_reps,
         rows=tuple(rows),
         mistakes=tuple(tallies),
+        exercise_key=exercise.key,
+        session_id=report.session_id,
     )

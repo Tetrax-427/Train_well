@@ -15,7 +15,8 @@ from pose_tracker.domain.exercise import Exercise
 from pose_tracker.domain.frame import Frame
 from pose_tracker.domain.pose import Pose
 from pose_tracker.interfaces import FrameObserver, PoseRenderer
-
+from collections.abc import Callable
+from pose_tracker.errors import PersistenceError
 
 @dataclass(frozen=True, slots=True)
 class LiveState:
@@ -35,7 +36,7 @@ class LiveState:
     can_select: bool
     can_start: bool
     can_stop: bool
-
+    last_time: str = ""
 
 @dataclass(frozen=True, slots=True)
 class LiveUpdate:
@@ -51,12 +52,15 @@ class TrainingPresenter:
         controller: SessionController,
         frames: FrameObserver,
         renderer: PoseRenderer,
+        last_time: Callable[[str], str | None] = lambda _key: None,
     ) -> None:
         self._controller = controller
         self._frames = frames
         self._renderer = renderer
+        self._last_time = last_time
+        self._last_time_text = ""
         self._status: AnalysisStatus | None = None
-
+    
     @property
     def exercises(self) -> tuple[Exercise, ...]:
         return self._controller.exercises
@@ -66,8 +70,22 @@ class TrainingPresenter:
     def select(self, key: str) -> LiveState:
         self._controller.select(key)
         self._status = None
+        self._last_time_text = self._lookup_last_time(key)
         return self.state()
 
+    def finish(self) -> LiveState:
+        """Leave the summary and go back to choosing an exercise."""
+        self._controller.back()
+        self._status = None
+        self._last_time_text = ""
+        return self.state()
+
+    def _lookup_last_time(self, key: str) -> str:
+        try:
+            return self._last_time(key) or ""
+        except PersistenceError:
+            return ""  # a missing hint must never get in the way of training
+        
     def start(self) -> LiveState:
         self._controller.start()
         self._status = None
@@ -77,12 +95,6 @@ class TrainingPresenter:
         report = self._controller.stop()
         self._status = None
         return report
-
-    def finish(self) -> LiveState:
-        """Leave the summary and go back to choosing an exercise."""
-        self._controller.back()
-        self._status = None
-        return self.state()
 
     def close(self) -> None:
         self._controller.close()
@@ -131,6 +143,7 @@ class TrainingPresenter:
             can_select=phase is not SessionPhase.ACTIVE,
             can_start=phase is SessionPhase.READY,
             can_stop=phase is SessionPhase.ACTIVE,
+            last_time=self._last_time_text,
         )
 
     @staticmethod
