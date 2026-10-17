@@ -13,6 +13,7 @@ from pose_tracker.domain.history import (
     StoredViolation,
 )
 from pose_tracker.domain.pose import LandmarkId, Pose
+from pose_tracker.domain.progress import ProgressEntry
 
 STARTED = datetime(2026, 10, 15, 15, 30, 12)
 ENDED = datetime(2026, 10, 15, 15, 31, 2)
@@ -28,14 +29,17 @@ def violation(
 
 
 def make_session(
-    session_id: int = 1, ended: datetime | None = ENDED, flawed: StoredViolation | None = None
+    session_id: int = 1,
+    ended: datetime | None = ENDED,
+    flawed: StoredViolation | None = None,
+    progress: ProgressEntry | None = None,
 ) -> StoredSession:
     flawed = flawed or violation()
     reps = (
         StoredRep(1, datetime(2026, 10, 15, 15, 30, 15), 2400, {}, ()),
         StoredRep(2, datetime(2026, 10, 15, 15, 30, 20), 2100, {}, (flawed,)),
     )
-    summary = SessionSummary(session_id, "squat", "Squat", STARTED, ended, 2, 1)
+    summary = SessionSummary(session_id, "squat", "Squat", STARTED, ended, 2, 1, progress)
     return StoredSession(summary, reps)
 
 
@@ -170,3 +174,16 @@ def test_cards_for_other_rules_have_no_ghost() -> None:
     detail = make_presenter(FakeReader(make_session(flawed=flawed))).load(1)
     assert detail is not None
     assert detail.mistakes[0].ghost is None
+
+def test_detail_carries_what_the_progress_box_needs() -> None:
+    entry = ProgressEntry(12, 40.0)
+    detail = make_presenter(FakeReader(make_session(progress=entry))).load(1)
+    assert detail is not None
+    assert (detail.exercise_key, detail.total_reps, detail.progress) == ("squat", 2, entry)
+    unsaved = make_presenter(FakeReader(make_session())).load(1)
+    assert unsaved is not None and unsaved.progress is None
+
+
+def test_sessions_saved_to_progress_are_marked_in_the_list() -> None:
+    [row] = make_presenter(FakeReader(make_session(progress=ProgressEntry(12)))).sessions()
+    assert row.subtitle == "15 Oct 2026, 15:30 · 2 reps · 1 clean · in Progress"

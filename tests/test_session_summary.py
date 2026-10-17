@@ -61,3 +61,8 @@ def test_empty_session() -> None:
     summary = build_summary(report())
     assert summary.total_reps == 0 and summary.clean_percent == 0
     assert summary.rows == () and summary.mistakes == ()
+
+def test_summary_carries_the_ids_the_save_box_needs() -> None:
+    summary = build_summary(SessionReport(SQUAT, (make_result(1),), session_id=7))
+    assert (summary.exercise_key, summary.session_id) == ("squat", 7)
+    assert build_summary(report(make_result(1))).session_id is None

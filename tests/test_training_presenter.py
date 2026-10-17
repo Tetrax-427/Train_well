@@ -9,6 +9,8 @@ from pose_tracker.domain.exercises.push_up import build_push_up
 from pose_tracker.domain.exercises.squat import build_squat
 from pose_tracker.domain.frame import Frame
 from pose_tracker.domain.view import StableViewDetector, ViewDetector
+from collections.abc import Callable  
+from pose_tracker.errors import PersistenceError
 
 STANDING = [175] * 3
 DESCENT = list(range(170, 85, -5))
@@ -44,15 +46,16 @@ class FakeFrames:
         self.seen += 1
 
 
-def make_presenter() -> tuple[TrainingPresenter, FakeRenderer, FakeFrames]:
+def make_presenter(
+    last_time: Callable[[str], str | None] = lambda _key: None,
+) -> tuple[TrainingPresenter, FakeRenderer, FakeFrames]:
     controller = SessionController(
         {"squat": build_squat(), "push_up": build_push_up()},
         view_detector_factory=lambda: StableViewDetector(ViewDetector(), frames_to_switch=1),
         recorder_factory=FakeRecorder,
     )
     renderer, frames = FakeRenderer(), FakeFrames()
-    return TrainingPresenter(controller, frames, renderer), renderer, frames
-
+    return TrainingPresenter(controller, frames, renderer, last_time), renderer, frames
 
 def feed(presenter: TrainingPresenter, knees: list[int], gap: float = 0.0) -> LiveUpdate:
     update = None
@@ -151,3 +154,25 @@ def test_finish_returns_to_selection() -> None:
     presenter.stop()
     state = presenter.finish()
     assert state.phase is SessionPhase.SELECT and state.exercise_key is None
+
+def test_selecting_an_exercise_shows_what_you_did_last_time() -> None:
+    presenter, _, _ = make_presenter(lambda key: f"Last time: {key}")
+    assert presenter.state().last_time == ""
+    assert presenter.select("squat").last_time == "Last time: squat"
+    presenter.start()
+    presenter.stop()
+    assert presenter.finish().last_time == ""
+
+
+def test_no_saved_history_means_no_hint() -> None:
+    presenter, _, _ = make_presenter(lambda _key: None)
+    assert presenter.select("squat").last_time == ""
+
+
+def test_a_failing_lookup_never_blocks_selecting_an_exercise() -> None:
+    def failing(_key: str) -> str | None:
+        raise PersistenceError("db down")
+
+    presenter, _, _ = make_presenter(failing)
+    state = presenter.select("squat")
+    assert state.exercise_key == "squat" and state.last_time == ""
