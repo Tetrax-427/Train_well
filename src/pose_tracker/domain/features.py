@@ -31,7 +31,8 @@ class BodyFeatures:
     hip_angle: float | None = None  # shoulder-hip-knee; 180 = fully extended
     torso_thigh_ratio: float | None = None  # shoulder-hip chord / hip-knee length (spine proxy)
     bar_offset: float | None = None  # wrist vs mid-foot, torso lengths; > 0 = ahead of mid-foot
-
+    # Curl measurement
+    upper_arm_angle: float | None = None  # hip-shoulder-elbow; 0 = arm hanging along the torso
 
 def compute_features(
     pose: Pose, side: BodySide, aspect_ratio: float, min_visibility: float
@@ -62,6 +63,9 @@ def compute_features(
         ),
         torso_thigh_ratio=_torso_thigh_ratio(pose, joints, aspect_ratio, min_visibility),
         bar_offset=_bar_offset(pose, side, joints, aspect_ratio, min_visibility),
+        upper_arm_angle=_joint_angle(
+            pose, (joints.hip, joints.shoulder, joints.elbow), aspect_ratio, min_visibility
+        ),
     )
 
 
