@@ -15,7 +15,7 @@ from PySide6.QtWidgets import (
 )
 
 from pose_tracker.application.session_summary import MistakeTally, SummaryState
-
+from pose_tracker.ui.qt_helpers import clear_layout
 
 class SummaryView(QWidget):
     """End-of-session report: totals, mistakes grouped with their explanations, and every rep."""
@@ -72,9 +72,7 @@ class SummaryView(QWidget):
         self._fill_rows(summary)
 
     def _fill_mistakes(self, summary: SummaryState) -> None:
-        while (item := self._mistakes.takeAt(0)) is not None:
-            if (widget := item.widget()) is not None:
-                widget.deleteLater()
+        clear_layout(self._mistakes)
         if not summary.mistakes:
             text = "No reps recorded." if summary.total_reps == 0 else "No form mistakes. Great session!"
             self._mistakes.addWidget(QLabel(text))

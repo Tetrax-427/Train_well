@@ -29,15 +29,29 @@ from pose_tracker.ui.capture_thread import CaptureThread
 from pose_tracker.ui.main_window import MainWindow
 from pose_tracker.ui.theme import STYLE_SHEET
 from pose_tracker.ui.train_view import TrainView
+from pose_tracker.application.history_presenter import HistoryPresenter
+from pose_tracker.infrastructure.opencv_snapshot_painter import OpenCvSnapshotPainter
+from pose_tracker.ui.history_view import HistoryView
+from pose_tracker.application.geometric_reference import GeometricReferenceProvider
+import os
+from pathlib import Path
 
+import PySide6
+
+
+# Always use PySide6's own platform plugins, whatever the shell or other libraries set.
+os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = str(
+    Path(PySide6.__file__).parent / "Qt" / "plugins" / "platforms"
+)
 
 def main() -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     config = AppConfig()
-    catalog = build_catalog(config.squat, config.shoulder_press, config.push_up, config.deadlift)
-
+    catalog = build_catalog(
+        config.squat, config.shoulder_press, config.push_up, config.deadlift, config.curl
+    )
     app = QApplication(sys.argv)
     app.setStyleSheet(STYLE_SHEET)
     try:
@@ -81,8 +95,18 @@ def main() -> int:
                 frame_buffer,
                 OpenCvPoseRenderer(config.visibility_threshold, show_fps=False),
             )
+            history_view = HistoryView(
+                HistoryPresenter(
+                    repository,
+                    {exercise.key: exercise.name for exercise in catalog.values()},
+                    GeometricReferenceProvider(),
+                ),
+                OpenCvSnapshotPainter(config.visibility_threshold),
+            )
             window = MainWindow(
-                config.window_name, TrainView(presenter, CaptureThread(camera, estimator))
+                config.window_name,
+                TrainView(presenter, CaptureThread(camera, estimator)),
+                history_view,
             )
             window.show()
             window.start_capture()

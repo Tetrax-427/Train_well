@@ -4,7 +4,7 @@ import numpy as np
 from PySide6.QtCore import QRect, Qt
 from PySide6.QtGui import QColor, QImage, QPainter
 from PySide6.QtWidgets import QSizePolicy, QWidget
-
+from pose_tracker.ui.qt_helpers import to_qimage
 
 class VideoWidget(QWidget):
     """Shows BGR frames scaled to fit, keeping the aspect ratio."""
@@ -17,12 +17,7 @@ class VideoWidget(QWidget):
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def show_image(self, image: np.ndarray) -> None:
-        frame = np.ascontiguousarray(image)
-        height, width = frame.shape[:2]
-        # copy() so the QImage owns its pixels once the numpy buffer is gone
-        self._image = QImage(
-            frame.data, width, height, frame.strides[0], QImage.Format.Format_BGR888
-        ).copy()
+        self._image = to_qimage(image)
         self.update()
 
     def paintEvent(self, event: object) -> None:
