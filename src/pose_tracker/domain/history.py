@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from pose_tracker.domain.pose import Pose
+from pose_tracker.domain.progress import ProgressEntry
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,6 +66,7 @@ class SessionSummary:
     ended_at: datetime | None
     total_reps: int
     clean_reps: int
+    progress: ProgressEntry | None = None  # set when the session was saved to Progress
 
 
 @dataclass(frozen=True, slots=True)
