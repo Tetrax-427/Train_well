@@ -35,6 +35,8 @@ from pose_tracker.ui.history_view import HistoryView
 from pose_tracker.application.geometric_reference import GeometricReferenceProvider
 import os
 from pathlib import Path
+from pose_tracker.application.progress_presenter import ProgressPresenter
+from pose_tracker.ui.progress_view import ProgressView
 
 import PySide6
 
@@ -90,24 +92,26 @@ def main() -> int:
                 recorder_factory=new_recorder,
                 min_visibility=config.visibility_threshold,
             )
+            names = {exercise.key: exercise.name for exercise in catalog.values()}
+            progress = ProgressPresenter(repository, repository, names)
             presenter = TrainingPresenter(
                 controller,
                 frame_buffer,
                 OpenCvPoseRenderer(config.visibility_threshold, show_fps=False),
+                last_time=progress.last_time,
             )
             history_view = HistoryView(
-                HistoryPresenter(
-                    repository,
-                    {exercise.key: exercise.name for exercise in catalog.values()},
-                    GeometricReferenceProvider(),
-                ),
+                HistoryPresenter(repository, names, GeometricReferenceProvider()),
                 OpenCvSnapshotPainter(config.visibility_threshold),
+                progress,
             )
             window = MainWindow(
                 config.window_name,
-                TrainView(presenter, CaptureThread(camera, estimator)),
+                TrainView(presenter, CaptureThread(camera, estimator), progress),
                 history_view,
+                ProgressView(progress),
             )
+
             window.show()
             window.start_capture()
             return app.exec()

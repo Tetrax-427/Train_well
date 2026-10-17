@@ -19,6 +19,7 @@ class LivePanel(QFrame):
 
         self._exercise = self._label("title", wrap=True)
         self._view = self._label("caption")
+        self._last_time = self._label("caption", wrap=True)
         self._reps = self._label("bigNumber", "0")
         self._angle = self._label("number", "--")
         self._feedback_title = self._label("subtitle")
@@ -28,6 +29,7 @@ class LivePanel(QFrame):
         layout = QVBoxLayout(self)
         layout.addWidget(self._exercise)
         layout.addWidget(self._view)
+        layout.addWidget(self._last_time)
         layout.addSpacing(12)
         layout.addWidget(self._label("caption", "REPS"))
         layout.addWidget(self._reps)
@@ -44,6 +46,7 @@ class LivePanel(QFrame):
         self._angle.setText(state.angle_text)
         self._feedback_title.setText(state.last_rep_title)
         self._feedback.setText("\n".join(f"• {line}" for line in state.feedback))
+        self._last_time.setText(state.last_time)
         if state.feedback_good != self._feedback_good:  # restyle only on change
             self._feedback_good = state.feedback_good
             self._feedback.setStyleSheet(_FEEDBACK_STYLES[state.feedback_good])

@@ -23,6 +23,7 @@ from pose_tracker.ui.capture_thread import CapturedFrame, CaptureThread
 from pose_tracker.ui.live_panel import LivePanel
 from pose_tracker.ui.summary_view import SummaryView
 from pose_tracker.ui.video_widget import VideoWidget
+from pose_tracker.application.progress_presenter import ProgressPresenter
 
 _BANNER_BASE = "border-radius: 8px; padding: 10px; font-size: 16px; font-weight: 600;"
 _BANNER_NORMAL = f"background: #161b22; border: 1px solid #30363d; color: #e6edf3; {_BANNER_BASE}"
@@ -35,15 +36,20 @@ class TrainView(QWidget):
     exit_requested = Signal()
 
     def __init__(
-        self, presenter: TrainingPresenter, capture: CaptureThread, parent: QWidget | None = None
+        self,
+        presenter: TrainingPresenter,
+        capture: CaptureThread,
+        progress: ProgressPresenter,
+        parent: QWidget | None = None,
     ) -> None:
+        
         super().__init__(parent)
         self._presenter = presenter
         self._capture = capture
         self._camera_failed = False
         self._banner_warning: bool | None = None
         self._keys = [exercise.key for exercise in presenter.exercises]
-
+        
         self._exercises = QListWidget()
         self._exercises.setFixedWidth(200)
         for exercise in presenter.exercises:
@@ -66,7 +72,7 @@ class TrainView(QWidget):
         live_layout.addLayout(video_column, 1)
         live_layout.addWidget(self._panel)
 
-        self._summary = SummaryView()
+        self._summary = SummaryView(progress)
         self._summary.train_again.connect(self._on_train_again)
         self._summary.done.connect(self._on_done)
 

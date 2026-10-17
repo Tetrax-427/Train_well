@@ -14,20 +14,24 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from pose_tracker.application.progress_presenter import ProgressPresenter
 from pose_tracker.application.session_summary import MistakeTally, SummaryState
+from pose_tracker.ui.progress_save_box import ProgressSaveBox
 from pose_tracker.ui.qt_helpers import clear_layout
 
+
 class SummaryView(QWidget):
-    """End-of-session report: totals, mistakes grouped with their explanations, and every rep."""
+    """End-of-session report: totals, save-to-progress, mistakes with explanations, every rep."""
 
     train_again = Signal()
     done = Signal()
 
-    def __init__(self) -> None:
+    def __init__(self, progress: ProgressPresenter) -> None:
         super().__init__()
         self._title = QLabel()
         self._title.setObjectName("title")
         self._stats = QLabel()
+        self._save_box = ProgressSaveBox(progress)
 
         self._mistakes = QVBoxLayout()
         host = QWidget()
@@ -56,6 +60,7 @@ class SummaryView(QWidget):
         layout = QVBoxLayout(self)
         layout.addWidget(self._title)
         layout.addWidget(self._stats)
+        layout.addWidget(self._save_box)
         layout.addWidget(self._section("MISTAKES TO FIX"))
         layout.addWidget(scroll, 3)
         layout.addWidget(self._section("EVERY REP"))
@@ -68,6 +73,14 @@ class SummaryView(QWidget):
             f"{summary.total_reps} reps  ·  {summary.clean_reps} clean  ·  "
             f"{summary.issue_reps} with issues  ·  {summary.clean_percent}% clean"
         )
+        if summary.session_id is None:
+            self._save_box.bind_unavailable(
+                "This session was not stored in history, so it can't be added to progress."
+            )
+        elif summary.total_reps == 0:
+            self._save_box.bind_unavailable("No reps were counted, so there is nothing to save.")
+        else:
+            self._save_box.bind(summary.session_id, summary.exercise_key, summary.total_reps, None)
         self._fill_mistakes(summary)
         self._fill_rows(summary)
 

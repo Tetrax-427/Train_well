@@ -15,17 +15,20 @@ from PySide6.QtWidgets import (
 )
 
 from pose_tracker.application.history_presenter import SessionDetail
+from pose_tracker.application.progress_presenter import ProgressPresenter
 from pose_tracker.interfaces import SnapshotPainter
 from pose_tracker.ui.mistake_card import MistakeCard
+from pose_tracker.ui.progress_save_box import ProgressSaveBox
 from pose_tracker.ui.qt_helpers import clear_layout
 
 
 class SessionDetailView(QWidget):
-    """Totals, every mistake with its snapshot, and every rep of one stored session."""
+    """Totals, progress, every mistake with its snapshot, and every rep of one stored session."""
 
     delete_requested = Signal(int)
+    progress_changed = Signal()
 
-    def __init__(self, painter: SnapshotPainter) -> None:
+    def __init__(self, painter: SnapshotPainter, progress: ProgressPresenter) -> None:
         super().__init__()
         self._painter = painter
         self._session_id: int | None = None
@@ -37,6 +40,8 @@ class SessionDetailView(QWidget):
         self._when.setObjectName("caption")
         self._stats = QLabel()
         self._stats.setWordWrap(True)
+        self._progress_box = ProgressSaveBox(progress)
+        self._progress_box.changed.connect(self.progress_changed)
 
         self._overlay = QCheckBox("Show my skeleton")
         self._overlay.setChecked(True)
@@ -72,6 +77,7 @@ class SessionDetailView(QWidget):
         layout.addWidget(self._title)
         layout.addWidget(self._when)
         layout.addWidget(self._stats)
+        layout.addWidget(self._progress_box)
         layout.addLayout(header)
         layout.addWidget(self._caption("MISTAKES"))
         layout.addWidget(scroll, 3)
@@ -83,6 +89,12 @@ class SessionDetailView(QWidget):
         self._title.setText(detail.title)
         self._when.setText(detail.when_text)
         self._stats.setText(detail.stats_text)
+        if detail.total_reps == 0 and detail.progress is None:
+            self._progress_box.bind_unavailable("No reps were counted, so there is nothing to save.")
+        else:
+            self._progress_box.bind(
+                detail.session_id, detail.exercise_key, detail.total_reps, detail.progress
+            )
 
         clear_layout(self._mistakes)
         self._cards = []
