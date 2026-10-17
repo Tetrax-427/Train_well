@@ -23,3 +23,7 @@ env/
 # Local workout history and session data
 history/
 sessions/
+.venv/
+history/
+sessions/
+__pycache__/
