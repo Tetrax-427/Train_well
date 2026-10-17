@@ -4,12 +4,12 @@ from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
-
+from collections.abc import Callable, Collection, Sequence
 import numpy as np
 
 from pose_tracker.domain.frame import Frame
 from pose_tracker.domain.history import RepRecord, SessionSummary, StoredSession
-from pose_tracker.domain.pose import Pose
+from pose_tracker.domain.pose import LandmarkId, Pose
 
 
 class FrameSource(Protocol):
@@ -91,3 +91,30 @@ class SessionReader(Protocol):
     def get_session(self, session_id: int) -> StoredSession | None: ...
 
     def delete_session(self, session_id: int) -> None: ...
+
+GhostFactory = Callable[[float], Pose | None]  # image aspect ratio -> corrected pose
+
+
+class ReferenceProvider(Protocol):
+    def has_reference(self, rule_id: str) -> bool:
+        """Whether mistakes of this rule can be shown against a corrected pose."""
+
+    def corrected_pose(
+        self, rule_id: str, pose: Pose, limit: float, aspect_ratio: float
+    ) -> Pose | None:
+        """Where the body should have been for the rule to pass, or None if unknown."""
+
+
+class SnapshotPainter(Protocol):
+    def paint(
+        self,
+        path: Path,
+        pose: Pose,
+        highlights: Collection[LandmarkId],
+        overlay: bool,
+        ghost: GhostFactory | None = None,
+    ) -> np.ndarray | None:
+        """The stored snapshot with the pose and/or the corrected pose drawn on it.
+
+        ``ghost`` is called with the image's aspect ratio. None if the file is unreadable.
+        """

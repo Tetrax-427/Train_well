@@ -33,8 +33,9 @@ def main() -> int:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     config = AppConfig()
-    catalog = build_catalog(config.squat, config.shoulder_press, config.push_up, config.deadlift)
-
+    catalog = build_catalog(
+        config.squat, config.shoulder_press, config.push_up, config.deadlift, config.curl
+    )
     parser = argparse.ArgumentParser(description="Gym form tracker")
     parser.add_argument("--exercise", choices=sorted(catalog), default="squat")
     exercise = catalog[parser.parse_args().exercise]

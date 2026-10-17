@@ -8,6 +8,7 @@ from pose_tracker.domain.view import ViewThresholds
 from pose_tracker.domain.exercises.shoulder_press import ShoulderPressSettings
 from pose_tracker.domain.exercises.push_up import PushUpSettings
 from pose_tracker.domain.exercises.deadlift import DeadliftSettings
+from pose_tracker.domain.exercises.curl import CurlSettings
 
 @dataclass(frozen=True, slots=True)
 class AppConfig:
@@ -32,3 +33,4 @@ class AppConfig:
     snapshot_max_width: int = 640
     snapshot_quality: int = 80
     snapshot_retention_ms: int = 15_000
+    curl: CurlSettings = CurlSettings()
