@@ -9,6 +9,14 @@ from pose_tracker.domain.exercises.shoulder_press import ShoulderPressSettings
 from pose_tracker.domain.exercises.push_up import PushUpSettings
 from pose_tracker.domain.exercises.deadlift import DeadliftSettings
 from pose_tracker.domain.exercises.curl import CurlSettings
+from pose_tracker.domain.exercises.bench_press import BenchPressSettings
+from pose_tracker.domain.exercises.lateral_raise import LateralRaiseSettings
+from pose_tracker.domain.exercises.plank import PlankSettings
+from pose_tracker.domain.exercises.angled_bench import DECLINE, INCLINE, AngledBenchSettings
+from pose_tracker.domain.exercises.bent_over_row import BentOverRowSettings
+from pose_tracker.domain.exercises.calf_raise import CalfRaiseSettings
+from pose_tracker.domain.exercises.hip_thrust import HipThrustSettings
+from pose_tracker.domain.exercises.lat_pulldown import CLOSE_GRIP, WIDE_GRIP, LatPulldownSettings
 
 @dataclass(frozen=True, slots=True)
 class AppConfig:
@@ -34,3 +42,15 @@ class AppConfig:
     snapshot_quality: int = 80
     snapshot_retention_ms: int = 15_000
     curl: CurlSettings = CurlSettings()
+    bench_press: BenchPressSettings = BenchPressSettings()
+    lateral_raise: LateralRaiseSettings = LateralRaiseSettings()
+    plank: PlankSettings = PlankSettings()
+    snapshot_retention_ms: int = 75_000   # long enough for a plank hold
+    snapshot_min_interval_ms: int = 100   # keep ~10 frames per second
+    incline_press: AngledBenchSettings = INCLINE
+    decline_press: AngledBenchSettings = DECLINE
+    pulldown_wide: LatPulldownSettings = WIDE_GRIP
+    pulldown_close: LatPulldownSettings = CLOSE_GRIP
+    hip_thrust: HipThrustSettings = HipThrustSettings()
+    bent_over_row: BentOverRowSettings = BentOverRowSettings()
+    calf_raise: CalfRaiseSettings = CalfRaiseSettings()

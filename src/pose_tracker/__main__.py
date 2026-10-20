@@ -14,7 +14,6 @@ from pose_tracker.application.history_recorder import HistoryRepRecorder
 from pose_tracker.application.pipeline import PosePipeline
 from pose_tracker.application.smoothed_estimator import SmoothedPoseEstimator
 from pose_tracker.config import AppConfig
-from pose_tracker.domain.exercises.catalog import build_catalog
 from pose_tracker.domain.pose_smoother import PoseSmoother
 from pose_tracker.domain.view import StableViewDetector, ViewDetector
 from pose_tracker.errors import PoseTrackerError
@@ -26,16 +25,14 @@ from pose_tracker.infrastructure.opencv_frame_encoder import OpenCvJpegEncoder
 from pose_tracker.infrastructure.opencv_renderer import OpenCvPoseRenderer
 from pose_tracker.infrastructure.sqlite_session_repository import SqliteSessionRepository
 from pose_tracker.infrastructure.text_rep_recorder import TextFileRepRecorder
-
+from pose_tracker.application.catalog_factory import catalog_for
 
 def main() -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     config = AppConfig()
-    catalog = build_catalog(
-        config.squat, config.shoulder_press, config.push_up, config.deadlift, config.curl
-    )
+    catalog = catalog_for(config)
     parser = argparse.ArgumentParser(description="Gym form tracker")
     parser.add_argument("--exercise", choices=sorted(catalog), default="squat")
     exercise = catalog[parser.parse_args().exercise]
@@ -59,6 +56,7 @@ def main() -> int:
             frame_buffer = FrameBuffer(
                 OpenCvJpegEncoder(config.snapshot_max_width, config.snapshot_quality),
                 config.snapshot_retention_ms,
+                min_interval_ms=config.snapshot_min_interval_ms,
             )
             repository = stack.enter_context(closing(SqliteSessionRepository(
                 config.history_dir / "history.db",
