@@ -6,6 +6,7 @@ from contextlib import ExitStack, closing
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from pose_tracker import config
 from pose_tracker.application.composite_recorder import SessionRepRecorder
 from pose_tracker.application.derived_landmarks_estimator import DerivedLandmarksEstimator
 from pose_tracker.application.frame_buffer import FrameBuffer
@@ -37,7 +38,7 @@ import os
 from pathlib import Path
 from pose_tracker.application.progress_presenter import ProgressPresenter
 from pose_tracker.ui.progress_view import ProgressView
-
+from pose_tracker.application.catalog_factory import catalog_for
 import PySide6
 
 
@@ -51,9 +52,7 @@ def main() -> int:
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
     config = AppConfig()
-    catalog = build_catalog(
-        config.squat, config.shoulder_press, config.push_up, config.deadlift, config.curl
-    )
+    catalog = catalog_for(config)
     app = QApplication(sys.argv)
     app.setStyleSheet(STYLE_SHEET)
     try:
@@ -72,6 +71,7 @@ def main() -> int:
             frame_buffer = FrameBuffer(
                 OpenCvJpegEncoder(config.snapshot_max_width, config.snapshot_quality),
                 config.snapshot_retention_ms,
+                min_interval_ms=config.snapshot_min_interval_ms,
             )
             repository = stack.enter_context(closing(SqliteSessionRepository(
                 config.history_dir / "history.db",

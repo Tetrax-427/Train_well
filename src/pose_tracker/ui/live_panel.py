@@ -22,6 +22,8 @@ class LivePanel(QFrame):
         self._last_time = self._label("caption", wrap=True)
         self._reps = self._label("bigNumber", "0")
         self._angle = self._label("number", "--")
+        self._timer_caption = self._label("caption", "HOLD")
+        self._timer = self._label("number", "0:00")
         self._feedback_title = self._label("subtitle")
         self._feedback = self._label("", wrap=True)
         self._feedback.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
@@ -35,6 +37,10 @@ class LivePanel(QFrame):
         layout.addWidget(self._reps)
         layout.addWidget(self._label("caption", "ANGLE"))
         layout.addWidget(self._angle)
+
+        layout.addWidget(self._timer_caption)
+        layout.addWidget(self._timer)
+
         layout.addSpacing(12)
         layout.addWidget(self._feedback_title)
         layout.addWidget(self._feedback, 1)
@@ -44,6 +50,11 @@ class LivePanel(QFrame):
         self._view.setText(state.view_text)
         self._reps.setText(str(state.rep_count))
         self._angle.setText(state.angle_text)
+        
+        timed = bool(state.timer_text)
+        self._timer_caption.setVisible(timed)
+        self._timer.setVisible(timed)
+        self._timer.setText(state.timer_text)
         self._feedback_title.setText(state.last_rep_title)
         self._feedback.setText("\n".join(f"• {line}" for line in state.feedback))
         self._last_time.setText(state.last_time)
