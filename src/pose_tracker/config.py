@@ -54,3 +54,4 @@ class AppConfig:
     hip_thrust: HipThrustSettings = HipThrustSettings()
     bent_over_row: BentOverRowSettings = BentOverRowSettings()
     calf_raise: CalfRaiseSettings = CalfRaiseSettings()
+    calibration_file: Path = Path("calibration.toml")

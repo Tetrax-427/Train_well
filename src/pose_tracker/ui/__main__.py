@@ -6,55 +6,59 @@ from contextlib import ExitStack, closing
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from pose_tracker import config
+from pose_tracker.application.calibration import calibrate, summarize
 from pose_tracker.application.composite_recorder import SessionRepRecorder
 from pose_tracker.application.derived_landmarks_estimator import DerivedLandmarksEstimator
 from pose_tracker.application.frame_buffer import FrameBuffer
+from pose_tracker.application.geometric_reference import GeometricReferenceProvider
+from pose_tracker.application.history_presenter import HistoryPresenter
 from pose_tracker.application.history_recorder import HistoryRepRecorder
+from pose_tracker.application.progress_presenter import ProgressPresenter
 from pose_tracker.application.session_controller import SessionController
 from pose_tracker.application.smoothed_estimator import SmoothedPoseEstimator
 from pose_tracker.application.training_presenter import TrainingPresenter
 from pose_tracker.config import AppConfig
-from pose_tracker.domain.exercises.catalog import build_catalog
 from pose_tracker.domain.pose_smoother import PoseSmoother
 from pose_tracker.domain.view import StableViewDetector, ViewDetector
-from pose_tracker.errors import PoseTrackerError
+from pose_tracker.errors import CalibrationError, PoseTrackerError
+from pose_tracker.infrastructure.calibration_file import read_calibration_file
 from pose_tracker.infrastructure.filesystem_snapshot_store import FileSnapshotStore
 from pose_tracker.infrastructure.mediapipe_estimator import MediaPipePoseEstimator
 from pose_tracker.infrastructure.opencv_camera import OpenCvCamera
 from pose_tracker.infrastructure.opencv_frame_encoder import OpenCvJpegEncoder
 from pose_tracker.infrastructure.opencv_renderer import OpenCvPoseRenderer
+from pose_tracker.infrastructure.opencv_snapshot_painter import OpenCvSnapshotPainter
 from pose_tracker.infrastructure.sqlite_session_repository import SqliteSessionRepository
 from pose_tracker.infrastructure.text_rep_recorder import TextFileRepRecorder
 from pose_tracker.ui.capture_thread import CaptureThread
+from pose_tracker.ui.history_view import HistoryView
 from pose_tracker.ui.main_window import MainWindow
+from pose_tracker.ui.progress_view import ProgressView
 from pose_tracker.ui.theme import STYLE_SHEET
 from pose_tracker.ui.train_view import TrainView
-from pose_tracker.application.history_presenter import HistoryPresenter
-from pose_tracker.infrastructure.opencv_snapshot_painter import OpenCvSnapshotPainter
-from pose_tracker.ui.history_view import HistoryView
-from pose_tracker.application.geometric_reference import GeometricReferenceProvider
-import os
-from pathlib import Path
-from pose_tracker.application.progress_presenter import ProgressPresenter
-from pose_tracker.ui.progress_view import ProgressView
-from pose_tracker.application.catalog_factory import catalog_for
-import PySide6
 
+logger = logging.getLogger(__name__)
 
-# Always use PySide6's own platform plugins, whatever the shell or other libraries set.
-os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = str(
-    Path(PySide6.__file__).parent / "Qt" / "plugins" / "platforms"
-)
 
 def main() -> int:
     logging.basicConfig(
         level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s"
     )
-    config = AppConfig()
-    catalog = catalog_for(config)
     app = QApplication(sys.argv)
     app.setStyleSheet(STYLE_SHEET)
+
+    base = AppConfig()
+    try:
+        calibration = calibrate(
+            base, read_calibration_file(base.calibration_file), base.calibration_file
+        )
+    except CalibrationError as exc:
+        logger.error("%s", exc)
+        QMessageBox.critical(None, base.window_name, str(exc))
+        return 1
+    config, catalog = calibration.config, calibration.catalog
+    logger.info("Calibration (%s): %s", base.calibration_file, summarize(base, calibration))
+
     try:
         with ExitStack() as stack:
             camera = stack.enter_context(closing(OpenCvCamera(
@@ -111,12 +115,11 @@ def main() -> int:
                 history_view,
                 ProgressView(progress),
             )
-
             window.show()
             window.start_capture()
             return app.exec()
     except PoseTrackerError as exc:
-        logging.getLogger(__name__).exception("Fatal application error")
+        logger.exception("Fatal application error")
         QMessageBox.critical(None, config.window_name, str(exc))
         return 1
 

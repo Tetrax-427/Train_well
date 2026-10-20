@@ -1,0 +1,228 @@
+# Pose Tracker calibration
+#
+# Every setting is listed with its default value, commented out.
+# To calibrate: remove the leading '# ' from a line and change the value.
+# To go back to the default: put the '# ' back (or delete the line).
+#
+# disabled_rules switches a form check off for that exercise; reps are still counted.
+# Example:  disabled_rules = ["control"]
+#
+# After editing run:  python -m pose_tracker.calibrate check
+# Restart the app to apply changes.
+
+[smoothing]
+# min_cutoff = 1.0
+# beta = 10.0
+# derivative_cutoff = 1.0
+
+[view_thresholds]
+# front_min_ratio = 0.55
+# side_max_ratio = 0.3
+# min_visibility = 0.5
+
+# Squat: rules are squat_depth, torso_lean
+[squat]
+# target_knee_angle = 100.0
+# max_torso_lean_deg = 50.0
+# rest_knee_angle = 160.0
+# leave_knee_angle = 150.0
+# disabled_rules = []
+
+# Deadlift: rules are start_back, hips_shoot_up, back_rounding, lockout_arch, head_position, hip_extension, knee_lockout, arms_straight, bar_start, bar_forward, start_knees, control
+[deadlift]
+# max_start_torso_deg = 70.0
+# max_torso_drift_deg = 10.0
+# max_chord_shrink = 0.08
+# max_layback_deg = 5.0
+# min_neck_angle = 150.0
+# lockout_hip_angle = 170.0
+# lockout_knee_angle = 170.0
+# min_elbow_angle = 160.0
+# max_bar_start_offset = 0.15
+# max_bar_forward_drift = 0.2
+# min_start_knee_angle = 100.0
+# max_unsteadiness = 0.015
+# rest_hip_angle = 110.0
+# leave_hip_angle = 125.0
+# lead_in_ms = 1500
+# disabled_rules = []
+
+# Hip Thrust: rules are thrust_lockout, foot_placement, head_position, thrust_tempo
+[hip_thrust]
+# lockout_hip_angle = 170.0
+# max_shin_angle_deg = 20.0
+# min_neck_angle = 145.0
+# min_rep_seconds = 1.0
+# max_gate_tilt_deg = 50.0
+# rest_hip_angle = 135.0
+# leave_hip_angle = 150.0
+# lead_in_ms = 1000
+# disabled_rules = []
+
+# Calf Raise: rules are calf_height, knee_bend, torso_swing, calf_tempo
+[calf_raise]
+# min_raise_deg = 18.0
+# min_knee_angle = 165.0
+# max_torso_change_deg = 8.0
+# min_rep_seconds = 1.0
+# rest_foot_angle = 8.0
+# leave_foot_angle = 14.0
+# disabled_rules = []
+
+# Bench Press: rules are bench_depth, bench_lockout, hips_lifted, back_arch, bar_path, bar_drift, control, head_position
+[bench_press]
+# bottom_elbow_angle = 95.0
+# lockout_elbow_angle = 165.0
+# max_hip_lift_deg = 12.0
+# max_arch_deg = 12.0
+# min_neck_angle = 145.0
+# max_path_deviation = 0.15
+# max_hand_drift = 0.3
+# max_unsteadiness = 0.03
+# max_lying_tilt_deg = 30.0
+# rest_elbow_angle = 155.0
+# leave_elbow_angle = 140.0
+# lead_in_ms = 1500
+# disabled_rules = []
+
+# Incline Bench Press: rules are bench_depth, bench_lockout, bench_angle, bar_path, bar_drift, control, head_position
+[incline_press]
+# min_back_tilt_deg = -65.0
+# max_back_tilt_deg = -15.0
+# bottom_elbow_angle = 95.0
+# lockout_elbow_angle = 165.0
+# max_back_shift_deg = 10.0
+# min_neck_angle = 145.0
+# max_path_deviation = 0.15
+# max_hand_drift = 0.3
+# max_unsteadiness = 0.03
+# rest_elbow_angle = 155.0
+# leave_elbow_angle = 140.0
+# lead_in_ms = 1500
+# disabled_rules = []
+
+# Decline Bench Press: rules are bench_depth, bench_lockout, bench_angle, bar_path, bar_drift, control, head_position
+[decline_press]
+# min_back_tilt_deg = 8.0
+# max_back_tilt_deg = 45.0
+# bottom_elbow_angle = 95.0
+# lockout_elbow_angle = 165.0
+# max_back_shift_deg = 10.0
+# min_neck_angle = 145.0
+# max_path_deviation = 0.15
+# max_hand_drift = 0.3
+# max_unsteadiness = 0.03
+# rest_elbow_angle = 155.0
+# leave_elbow_angle = 140.0
+# lead_in_ms = 1500
+# disabled_rules = []
+
+# Shoulder Press: rules are press_bottom, press_lockout, layback, bar_path, control, leg_drive
+[shoulder_press]
+# bottom_elbow_angle = 100.0
+# lockout_elbow_angle = 165.0
+# max_layback_deg = 15.0
+# max_path_deviation = 0.15
+# max_unsteadiness = 0.015
+# max_leg_movement_deg = 20.0
+# rest_elbow_angle = 125.0
+# leave_elbow_angle = 140.0
+# lead_in_ms = 1500
+# disabled_rules = []
+
+# Lateral Raise: rules are raise_height, raise_too_high, arm_symmetry, elbow_bend, shrugging, body_sway, control
+[lateral_raise]
+# min_raise_deg = 80.0
+# max_raise_deg = 105.0
+# max_arm_asymmetry_deg = 15.0
+# min_arm_bend_deg = 120.0
+# max_shrug = 0.15
+# max_body_sway_deg = 8.0
+# max_unsteadiness = 0.03
+# rest_raise_deg = 30.0
+# leave_raise_deg = 45.0
+# lead_in_ms = 1000
+# disabled_rules = []
+
+# Push-up: rules are pushup_depth, pushup_lockout, hip_sag, hip_pike, knee_bend, head_position, hand_placement
+[push_up]
+# bottom_elbow_angle = 95.0
+# lockout_elbow_angle = 165.0
+# max_hip_sag_deg = 12.0
+# max_hip_pike_deg = 12.0
+# min_knee_angle = 160.0
+# max_hand_offset = 0.3
+# min_neck_angle = 145.0
+# max_plank_incline_deg = 35.0
+# rest_elbow_angle = 150.0
+# leave_elbow_angle = 135.0
+# lead_in_ms = 1000
+# disabled_rules = []
+
+# Lat Pulldown (Wide Grip): rules are pulldown_depth, pulldown_stretch, grip_width, bar_level, control
+[pulldown_wide]
+# min_grip_ratio = 1.5
+# max_grip_ratio = 3.0
+# max_depth_elevation_deg = 65.0
+# min_stretch_deg = 155.0
+# max_bar_tilt = 0.3
+# max_unsteadiness = 0.03
+# rest_elevation_deg = 120.0
+# leave_elevation_deg = 100.0
+# lead_in_ms = 1000
+# disabled_rules = []
+
+# Lat Pulldown (Close Grip): rules are pulldown_depth, pulldown_stretch, grip_width, bar_level, control
+[pulldown_close]
+# min_grip_ratio = 0.0
+# max_grip_ratio = 1.1
+# max_depth_elevation_deg = 55.0
+# min_stretch_deg = 155.0
+# max_bar_tilt = 0.3
+# max_unsteadiness = 0.03
+# rest_elevation_deg = 120.0
+# leave_elevation_deg = 100.0
+# lead_in_ms = 1000
+# disabled_rules = []
+
+# Bent-Over Row: rules are row_top, row_stretch, row_hinge, torso_swing, back_rounding, bar_path, control, head_position
+[bent_over_row]
+# top_elbow_angle = 105.0
+# bottom_elbow_angle = 160.0
+# min_hinge_deg = 30.0
+# max_hinge_deg = 75.0
+# max_torso_change_deg = 15.0
+# max_chord_shrink = 0.08
+# min_neck_angle = 140.0
+# max_path_deviation = 0.2
+# max_unsteadiness = 0.03
+# rest_elbow_angle = 150.0
+# leave_elbow_angle = 135.0
+# lead_in_ms = 1000
+# disabled_rules = []
+
+# Bicep Curl: rules are curl_top, curl_bottom, elbow_drift, torso_swing, control
+[curl]
+# top_elbow_angle = 55.0
+# bottom_elbow_angle = 160.0
+# max_upper_arm_angle = 30.0
+# max_torso_swing_deg = 10.0
+# max_unsteadiness = 0.025
+# rest_elbow_angle = 150.0
+# leave_elbow_angle = 140.0
+# lead_in_ms = 1500
+# disabled_rules = []
+
+# Plank: rules are hip_sag, hip_pike, knee_bend, head_position, support_position, hold_steady
+[plank]
+# max_hip_sag_deg = 10.0
+# max_hip_pike_deg = 10.0
+# min_knee_angle = 160.0
+# min_neck_angle = 145.0
+# max_elbow_offset = 0.3
+# max_hip_wobble_deg = 8.0
+# rest_incline_deg = 45.0
+# leave_incline_deg = 30.0
+# min_hold_ms = 5000
+# pose_grace_ms = 1500
+# disabled_rules = []

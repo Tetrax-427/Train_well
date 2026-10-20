@@ -15,3 +15,6 @@ class PersistenceError(PoseTrackerError):
 
 class SessionStateError(PoseTrackerError):
     """Operation not allowed in the current session phase."""
+
+class CalibrationError(PoseTrackerError):
+    """calibration.toml could not be read or holds invalid settings."""
