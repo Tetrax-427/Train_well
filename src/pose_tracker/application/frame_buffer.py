@@ -14,22 +14,37 @@ class FrameBuffer:
     """
 
     def __init__(
-        self, encoder: FrameEncoder, retention_ms: int = 15_000, max_gap_ms: int = 500
+        self,
+        encoder: FrameEncoder,
+        retention_ms: int = 15_000,
+        max_gap_ms: int = 500,
+        min_interval_ms: int = 0,
     ) -> None:
-        if retention_ms <= 0 or max_gap_ms < 0:
-            raise ValueError("retention_ms must be positive and max_gap_ms non-negative")
+        if retention_ms <= 0 or max_gap_ms < 0 or min_interval_ms < 0:
+            raise ValueError(
+                "retention_ms must be positive; max_gap_ms and min_interval_ms non-negative"
+            )
         self._encoder = encoder
         self._retention_ms = retention_ms
         self._max_gap_ms = max_gap_ms
+        self._min_interval_ms = min_interval_ms
+        self._last_kept_ms: int | None = None
         self._frames: deque[tuple[int, bytes]] = deque()
 
     def observe(self, frame: Frame) -> None:
+        if (
+            self._last_kept_ms is not None
+            and frame.timestamp_ms - self._last_kept_ms < self._min_interval_ms
+        ):
+            return
         jpeg = self._encoder.encode(frame.image)
         if jpeg is None:
             return
         self._frames.append((frame.timestamp_ms, jpeg))
+        self._last_kept_ms = frame.timestamp_ms
         while frame.timestamp_ms - self._frames[0][0] > self._retention_ms:
             self._frames.popleft()
+
 
     def nearest(self, timestamp_ms: int) -> bytes | None:
         """The buffered frame closest to ``timestamp_ms``, or None if none is close enough."""

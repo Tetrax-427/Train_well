@@ -37,6 +37,7 @@ class LiveState:
     can_start: bool
     can_stop: bool
     last_time: str = ""
+    timer_text: str = ""  # running hold time for timed exercises, otherwise empty
 
 @dataclass(frozen=True, slots=True)
 class LiveUpdate:
@@ -121,7 +122,8 @@ class TrainingPresenter:
         live = status if phase is SessionPhase.ACTIVE else None
         last = live.last_result if live is not None else None
         angle = live.driver_value if live is not None else None
-
+        elapsed = live.rep_elapsed_ms if live is not None else None
+        timer = _clock(elapsed or 0) if exercise is not None and exercise.timed else ""
         if last is None:
             title, feedback, good = "", (), None
         else:
@@ -144,6 +146,7 @@ class TrainingPresenter:
             can_start=phase is SessionPhase.READY,
             can_stop=phase is SessionPhase.ACTIVE,
             last_time=self._last_time_text,
+            timer_text=timer,
         )
 
     @staticmethod
@@ -161,3 +164,7 @@ class TrainingPresenter:
         if hint is not None:
             return hint, True
         return ("Ready. Press Start when you are set" if ready else "Tracking"), False
+
+def _clock(elapsed_ms: int) -> str:
+    minutes, seconds = divmod(elapsed_ms // 1000, 60)
+    return f"{minutes}:{seconds:02d}"

@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from typing import Protocol
+from pose_tracker.domain import pose
 from pose_tracker.domain.body_side import BodySide, select_visible_side
 from pose_tracker.domain.exercise import Exercise
 from pose_tracker.domain.features import compute_features
@@ -30,6 +31,7 @@ class AnalysisStatus:
     driver_value: float | None
     rep_count: int
     last_result: RepResult | None
+    rep_elapsed_ms: int | None = None  # time into the current rep or hold
 
 
 class RepRecorder(Protocol):
@@ -51,7 +53,12 @@ class ExerciseAnalyzer:
         self._view_detector = view_detector
         self._min_visibility = min_visibility
         self._recorder = recorder
-        self._rep_detector = RepDetector(exercise.thresholds, lead_in_ms=exercise.lead_in_ms)
+        self._rep_detector = RepDetector(
+            exercise.thresholds,
+            min_duration_ms=exercise.min_rep_ms,
+            lead_in_ms=exercise.lead_in_ms,
+        )
+        self._last_seen_ms = 0
         self._side = BodySide.LEFT
         self._results: list[RepResult] = []
 
@@ -69,8 +76,12 @@ class ExerciseAnalyzer:
         view = self._view_detector.update(pose, aspect_ratio)
 
         if pose is None:
+            lost_for = timestamp_ms - self._last_seen_ms
+            if self._rep_detector.in_rep and lost_for < self._exercise.pose_grace_ms:
+                return self._status(view, view_ok=True, value=None)  # brief dropout: keep the rep
             self._rep_detector.reset()
             return self._status(view, view_ok=False, value=None)
+        self._last_seen_ms = timestamp_ms
 
         in_rep = self._rep_detector.in_rep
         # Mid-rep, posture changes can distort the view estimate; only gate between reps.
@@ -107,4 +118,5 @@ class ExerciseAnalyzer:
             driver_value=value,
             rep_count=len(self._results),
             last_result=self._results[-1] if self._results else None,
+            rep_elapsed_ms=self._rep_detector.elapsed_ms,
         )
