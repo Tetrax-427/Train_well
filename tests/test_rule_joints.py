@@ -32,3 +32,9 @@ def test_head_position_includes_the_ear_of_the_chosen_side() -> None:
 
 def test_unknown_rule_highlights_nothing() -> None:
     assert highlighted_landmarks("made_up", BodySide.LEFT) == ()
+
+def test_two_sided_rules_highlight_both_sides() -> None:
+    assert highlighted_landmarks("elbow_bend", BodySide.LEFT) == (
+        LandmarkId.LEFT_SHOULDER, LandmarkId.LEFT_ELBOW, LandmarkId.LEFT_WRIST,
+        LandmarkId.RIGHT_SHOULDER, LandmarkId.RIGHT_ELBOW, LandmarkId.RIGHT_WRIST,
+    )

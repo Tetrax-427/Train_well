@@ -79,3 +79,9 @@ def test_lead_in_keeps_the_bottom_before_the_rep_without_counting_it_in_duration
 def test_lead_in_is_limited_to_its_window() -> None:
     [rep] = feed(RepDetector(RISE, lead_in_ms=250), PRESS)
     assert rep.lead_in_count == 3
+
+def test_elapsed_time_of_the_running_rep() -> None:
+    detector = RepDetector(THRESHOLDS)
+    assert detector.elapsed_ms is None
+    feed(detector, [170, 140, 120])  # the rep starts at 100 ms and the last sample is at 200 ms
+    assert detector.elapsed_ms == 100

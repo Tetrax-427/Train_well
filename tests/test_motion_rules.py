@@ -64,3 +64,18 @@ def test_too_few_samples_are_not_judged() -> None:
 def test_even_or_tiny_window_rejected() -> None:
     with pytest.raises(ValueError):
         SteadinessRule("s", "m", 0.01, window=4)
+
+PATH_INVERTED = PathDeviationRule("path", "straight", limit=0.15, inverted=True)
+UP = [(0.0, 1.0 + j / 9) for j in range(1, 10)]
+
+
+def test_inverted_rule_accepts_a_straight_descent_and_ascent() -> None:
+    down = [(0.0, 2.0 - i / 9) for i in range(10)]  # 2.0 -> 1.0
+    assert PATH_INVERTED.evaluate(rep_from_track(down + UP)) is None
+
+
+def test_inverted_rule_flags_a_bowed_descent() -> None:
+    down = [(0.3 * math.sin(math.pi * i / 9), 2.0 - i / 9) for i in range(10)]
+    violation = PATH_INVERTED.evaluate(rep_from_track(down + UP))
+    assert violation is not None
+    assert violation.measured == pytest.approx(0.3 * math.sin(4 * math.pi / 9))

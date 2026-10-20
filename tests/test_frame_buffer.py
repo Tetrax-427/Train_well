@@ -63,3 +63,13 @@ def test_invalid_settings_rejected() -> None:
         FrameBuffer(MarkerEncoder(), retention_ms=0)
     with pytest.raises(ValueError):
         FrameBuffer(MarkerEncoder(), max_gap_ms=-1)
+
+def test_frames_closer_than_the_minimum_interval_are_skipped() -> None:
+    buffer = filled([0, 40, 80, 120, 160, 200], min_interval_ms=100)  # keeps 0 and 120
+    assert buffer.nearest(30) == bytes([0])
+    assert buffer.nearest(110) == bytes([12])
+
+
+def test_negative_minimum_interval_is_rejected() -> None:
+    with pytest.raises(ValueError):
+        FrameBuffer(MarkerEncoder(), min_interval_ms=-1)

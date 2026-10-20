@@ -3,7 +3,10 @@ from __future__ import annotations
 import math
 
 import pytest
-from pose_factory import deadlift_pose, press_pose, pushup_pose, squat_pose, curl_pose
+from pose_factory import ( 
+    deadlift_pose, press_pose, pushup_pose, squat_pose, curl_pose, 
+    bench_pose, front_pose, plank_pose, pulldown_pose, 
+    thrust_pose, calf_pose)
 
 from pose_tracker.config import AppConfig
 from pose_tracker.domain.body_side import BodySide
@@ -17,7 +20,10 @@ L = LandmarkId
 # Movement over time, or no absolute target stored: no corrected pose.
 NO_GHOST = {
     "control", "bar_path", "leg_drive", "hips_shoot_up", "back_rounding",
-    "bar_start", "bar_forward", "torso_swing", 
+    "bar_start", "bar_forward", "torso_swing", "bar_drift",
+    "shrugging", "body_sway", "support_position", "hold_steady",
+    "bench_angle", "grip_width", "bar_level", "thrust_lockout", "foot_placement",
+    "thrust_tempo", "calf_height", "calf_tempo",
 }
 
 
@@ -230,3 +236,88 @@ def test_elbow_drift_ghost_pins_the_upper_arm_and_carries_the_forearm() -> None:
     assert measure(ghost).elbow_angle == pytest.approx(90)  # the arm moves as one piece
     assert xy(ghost, L.LEFT_SHOULDER) == pytest.approx(xy(pose, L.LEFT_SHOULDER))
     assert xy(ghost, L.LEFT_ELBOW) != pytest.approx(xy(pose, L.LEFT_ELBOW))
+
+@pytest.mark.parametrize(("rule_id", "elbow", "limit"), [
+    ("bench_depth", 120, 90.0),
+    ("bench_lockout", 150, 165.0),
+])
+def test_bench_elbow_ghosts_set_the_angle_and_keep_the_upper_arm_still(
+    rule_id: str, elbow: float, limit: float
+) -> None:
+    pose = bench_pose(elbow)
+    ghost = ghost_of(rule_id, pose, limit)
+    assert measure(ghost).elbow_angle == pytest.approx(limit)
+    assert xy(ghost, L.LEFT_SHOULDER) == pytest.approx(xy(pose, L.LEFT_SHOULDER))
+    assert xy(ghost, L.LEFT_ELBOW) == pytest.approx(xy(pose, L.LEFT_ELBOW))
+
+
+@pytest.mark.parametrize(("rule_id", "tilt"), [("hips_lifted", 20), ("back_arch", -20)])
+def test_back_ghost_levels_the_hips_and_carries_the_legs(rule_id: str, tilt: float) -> None:
+    pose = bench_pose(120, tilt_deg=tilt)
+    ghost = ghost_of(rule_id, pose, 12.0)
+
+    def knee_offset(p: Pose) -> tuple[float, float]:
+        return (
+            p.get(L.LEFT_KNEE).x - p.get(L.LEFT_HIP).x,
+            p.get(L.LEFT_KNEE).y - p.get(L.LEFT_HIP).y,
+        )
+
+    assert measure(pose).back_tilt_deg == pytest.approx(tilt)
+    assert measure(ghost).back_tilt_deg == pytest.approx(0, abs=1e-6)
+    assert xy(ghost, L.LEFT_SHOULDER) == pytest.approx(xy(pose, L.LEFT_SHOULDER))
+    assert xy(ghost, L.LEFT_HIP) != pytest.approx(xy(pose, L.LEFT_HIP))
+    assert knee_offset(ghost) == pytest.approx(knee_offset(pose))
+
+@pytest.mark.parametrize(("rule_id", "start", "limit"), [
+    ("raise_height", 55, 80.0),
+    ("raise_too_high", 125, 105.0),
+])
+def test_raise_ghosts_swing_both_arms_to_the_limit(rule_id: str, start: float, limit: float) -> None:
+    pose = front_pose(start)
+    ghost = ghost_of(rule_id, pose, limit)
+    assert measure(ghost).arm_raise_deg == pytest.approx(limit)
+    assert measure(ghost).arm_asymmetry_deg == pytest.approx(0, abs=1e-6)
+    assert xy(ghost, L.LEFT_SHOULDER) == pytest.approx(xy(pose, L.LEFT_SHOULDER))
+    assert xy(ghost, L.LEFT_ELBOW) != pytest.approx(xy(pose, L.LEFT_ELBOW))
+    assert xy(ghost, L.RIGHT_ELBOW) != pytest.approx(xy(pose, L.RIGHT_ELBOW))
+
+
+def test_arm_symmetry_ghost_raises_the_lagging_arm_to_within_the_limit() -> None:
+    pose = front_pose(100, 60)
+    ghost = ghost_of("arm_symmetry", pose, 15.0)
+    assert measure(pose).arm_asymmetry_deg == pytest.approx(40)
+    assert measure(ghost).arm_asymmetry_deg == pytest.approx(15)
+    assert xy(ghost, L.LEFT_ELBOW) == pytest.approx(xy(pose, L.LEFT_ELBOW))  # the higher arm stays
+    assert xy(ghost, L.RIGHT_ELBOW) != pytest.approx(xy(pose, L.RIGHT_ELBOW))
+
+
+def test_elbow_bend_ghost_straightens_both_forearms_to_the_limit() -> None:
+    pose = front_pose(60, elbow_angle_deg=90)
+    ghost = ghost_of("elbow_bend", pose, 120.0)
+    assert measure(ghost).arm_bend_deg == pytest.approx(120)
+    assert xy(ghost, L.LEFT_ELBOW) == pytest.approx(xy(pose, L.LEFT_ELBOW))
+    assert xy(ghost, L.LEFT_WRIST) != pytest.approx(xy(pose, L.LEFT_WRIST))
+
+def test_pulldown_depth_ghost_swings_both_arms_down_to_the_limit() -> None:
+    pose = pulldown_pose(110, 140.0)
+    ghost = ghost_of("pulldown_depth", pose, 65.0)
+    assert measure(ghost).arm_elevation_deg == pytest.approx(65)
+    assert measure(ghost).arm_bend_deg == pytest.approx(measure(pose).arm_bend_deg)  # arms move as one piece
+    assert xy(ghost, L.LEFT_SHOULDER) == pytest.approx(xy(pose, L.LEFT_SHOULDER))
+    assert xy(ghost, L.LEFT_ELBOW) != pytest.approx(xy(pose, L.LEFT_ELBOW))
+    assert xy(ghost, L.RIGHT_ELBOW) != pytest.approx(xy(pose, L.RIGHT_ELBOW))
+
+
+@pytest.mark.parametrize(("rule_id", "elbow", "limit"), [
+    ("row_top", 120, 105.0),
+    ("row_stretch", 140, 160.0),
+])
+def test_row_elbow_ghosts_set_the_angle(rule_id: str, elbow: float, limit: float) -> None:
+    assert measure(ghost_of(rule_id, press_pose(elbow), limit)).elbow_angle == pytest.approx(limit)
+
+
+def test_row_hinge_ghost_tilts_the_torso_to_the_limit() -> None:
+    pose = deadlift_pose(130, torso_deg=15)
+    ghost = ghost_of("row_hinge", pose, 30.0)
+    assert measure(ghost).torso_lean_deg == pytest.approx(30)
+    assert xy(ghost, L.LEFT_HIP) == pytest.approx(xy(pose, L.LEFT_HIP))

@@ -11,6 +11,8 @@ from pose_tracker.domain.frame import Frame
 from pose_tracker.domain.view import StableViewDetector, ViewDetector
 from collections.abc import Callable  
 from pose_tracker.errors import PersistenceError
+from pose_factory import plank_pose, press_pose
+from pose_tracker.domain.exercises.plank import build_plank
 
 STANDING = [175] * 3
 DESCENT = list(range(170, 85, -5))
@@ -176,3 +178,19 @@ def test_a_failing_lookup_never_blocks_selecting_an_exercise() -> None:
     presenter, _, _ = make_presenter(failing)
     state = presenter.select("squat")
     assert state.exercise_key == "squat" and state.last_time == ""
+
+def test_timed_exercises_show_a_running_hold_timer() -> None:
+    controller = SessionController(
+        {"plank": build_plank(), "squat": build_squat()},
+        view_detector_factory=lambda: StableViewDetector(ViewDetector(), frames_to_switch=1),
+        recorder_factory=FakeRecorder,
+    )
+    presenter = TrainingPresenter(controller, FakeFrames(), FakeRenderer())
+    assert presenter.select("squat").timer_text == ""
+
+    assert presenter.select("plank").timer_text == "0:00"
+    presenter.start()
+    update = None
+    for i, pose in enumerate([press_pose(120)] * 3 + [plank_pose()] * 20):
+        update = presenter.on_frame(Frame(np.zeros((8, 8, 3), dtype=np.uint8), i * 100), pose)
+    assert update is not None and update.state.timer_text == "0:01"

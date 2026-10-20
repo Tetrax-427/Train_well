@@ -4,7 +4,9 @@ from operator import attrgetter
 import pytest
 
 from pose_tracker.domain.features import BodyFeatures
-from pose_tracker.domain.form import ReachBelowRule, StayBelowRule, ReachAboveRule, StayStillRule, StayAboveRule, BandAtRestRule, DriftFromRestRule
+from pose_tracker.domain.form import ( 
+    ReachBelowRule, StayBelowRule, ReachAboveRule, StayStillRule, StayAboveRule, 
+    BandAtRestRule, DriftFromRestRule, MedianBandRule, BandAtPeakRule, TempoRule,)
 from pose_tracker.domain.pose import Pose
 from pose_tracker.domain.rep import Rep, Sample
 
@@ -141,3 +143,39 @@ def test_drift_uses_the_first_sample_when_there_is_no_lead_in() -> None:
 def test_drift_rejects_an_invalid_direction() -> None:
     with pytest.raises(ValueError):
         DriftFromRestRule("d", "m", attrgetter("torso_lean_deg"), 1.0, direction=0)
+
+MEDIAN = MedianBandRule("median", "centered", attrgetter("torso_lean_deg"), -0.3, 0.3)
+
+
+def test_median_band_ignores_a_few_outliers() -> None:
+    assert MEDIAN.evaluate(make_rep([0] * 5, [0.0, 0.1, 5.0, -0.1, 0.0])) is None
+
+
+def test_median_band_flags_a_typical_value_outside_the_band() -> None:
+    violation = MEDIAN.evaluate(make_rep([0] * 5, [0.5, 0.6, 0.7, 0.0, 0.8]))
+    assert violation is not None
+    assert violation.measured == 0.6
+    assert violation.limit == 0.3
+
+PEAK = BandAtPeakRule(
+    "peak", "msg", attrgetter("torso_lean_deg"), attrgetter("knee_angle"), 0.0, 20.0
+)
+
+
+def test_band_at_peak_checks_the_value_at_the_peak_sample() -> None:
+    violation = PEAK.evaluate(make_rep([100, 170, 120], [5, 30, 5]))
+    assert violation is not None
+    assert (violation.measured, violation.limit, violation.timestamp_ms) == (30, 20, 100)
+
+
+def test_band_at_peak_ok_when_the_value_is_in_band_or_missing() -> None:
+    assert PEAK.evaluate(make_rep([100, 170, 120], [5, 15, 5])) is None
+    assert PEAK.evaluate(make_rep([100, 170, 120], [5, None, 5])) is None
+
+
+def test_tempo_rule_flags_fast_reps() -> None:
+    rep = make_rep([0] * 3, [0] * 3)  # lasts 0.2 s
+    violation = TempoRule("tempo", "slow down", min_seconds=0.5).evaluate(rep)
+    assert violation is not None
+    assert (violation.measured, violation.limit) == (pytest.approx(0.2), 0.5)
+    assert TempoRule("tempo", "slow down", min_seconds=0.2).evaluate(rep) is None
