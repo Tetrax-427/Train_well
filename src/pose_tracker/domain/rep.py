@@ -86,6 +86,13 @@ class RepDetector:
     def in_rep(self) -> bool:
         return self._state is _State.IN_REP
 
+    @property
+    def elapsed_ms(self) -> int | None:
+        """Time since the current rep began (not counting the lead-in), or None if not in a rep."""
+        if self._state is not _State.IN_REP or len(self._samples) <= self._lead_in_count:
+            return None
+        return self._samples[-1].timestamp_ms - self._samples[self._lead_in_count].timestamp_ms
+    
     def update(self, sample: Sample, value: float) -> Rep | None:
         """Feed one frame. Returns the finished Rep on the frame that completes it."""
         t = self._thresholds

@@ -12,6 +12,7 @@ from pose_tracker.domain.body_side import (
 )
 from pose_tracker.domain.geometry import Point2D, distance
 from pose_tracker.domain.pose import Landmark, LandmarkId, Pose
+from pose_tracker.domain.geometry import Point2D, angle_at, distance
 
 _BASE_LANDMARKS = int(LandmarkId.NECK)  # the model's own landmarks; derived ones follow
 
@@ -27,7 +28,7 @@ _HAND = {
     BodySide.RIGHT: (LandmarkId.RIGHT_PINKY, LandmarkId.RIGHT_INDEX, LandmarkId.RIGHT_THUMB),
 }
 _EAR = {BodySide.LEFT: LandmarkId.LEFT_EAR, BodySide.RIGHT: LandmarkId.RIGHT_EAR}
-
+_LEGS: tuple[int, ...] = tuple(range(LandmarkId.LEFT_HIP, LandmarkId.RIGHT_FOOT_INDEX + 1))
 
 @dataclass(slots=True)
 class _Skeleton:
@@ -190,6 +191,58 @@ def _upper_arm(s: _Skeleton, limit: float) -> bool:
     return _swing(
         s, p[j.shoulder], p[j.hip], p[j.elbow], limit, (j.elbow, j.wrist, *_HAND[s.side])
     )
+
+def _level_back(s: _Skeleton, limit: float) -> bool:
+    """Hips and legs shift vertically until the shoulder-hip line is level (limit not needed)."""
+    j, p = s.joints, s.points
+    shoulder, hip = p[j.shoulder], p[j.hip]
+    if distance(shoulder, hip) == 0.0:
+        return False
+    _translate(s, _LEGS, 0.0, shoulder.y - hip.y)
+    return True
+
+def _for_both_sides(s: _Skeleton, corrector: Corrector, limit: float) -> bool:
+    """Apply a one-sided corrector to the left arm/leg and then to the right one."""
+    done = False
+    for side in (BodySide.LEFT, BodySide.RIGHT):
+        done = corrector(_Skeleton(s.points, side, landmarks_for(side)), limit) or done
+    return done
+
+
+def _raise_both(s: _Skeleton, limit: float) -> bool:
+    """Both arms swing about their shoulders to the same raise angle."""
+    return _for_both_sides(s, _upper_arm, limit)
+
+
+def _elbows_both(s: _Skeleton, limit: float) -> bool:
+    """Both forearms swing about their elbows to the same elbow angle."""
+    return _for_both_sides(s, _elbow, limit)
+
+
+def _match_arms(s: _Skeleton, limit: float) -> bool:
+    """The lagging arm swings up to within ``limit`` degrees of the higher arm."""
+    arms = []
+    for side in (BodySide.LEFT, BodySide.RIGHT):
+        j = landmarks_for(side)
+        try:
+            arms.append((angle_at(s.points[j.hip], s.points[j.shoulder], s.points[j.elbow]), side))
+        except ValueError:
+            return False
+    (_, low_side), (high_angle, _) = sorted(arms, key=lambda arm: arm[0])
+    lagging = _Skeleton(s.points, low_side, landmarks_for(low_side))
+    return _upper_arm(lagging, high_angle - limit)
+
+def _arm_from_down(s: _Skeleton, limit: float) -> bool:
+    """The arm swings about the shoulder until the upper arm is ``limit`` degrees from straight down."""
+    j, p = s.joints, s.points
+    shoulder = p[j.shoulder]
+    down = Point2D(shoulder.x, shoulder.y + 1.0)  # image y grows downward
+    return _swing(s, shoulder, down, p[j.elbow], limit, (j.elbow, j.wrist, *_HAND[s.side]))
+
+
+def _arms_from_down(s: _Skeleton, limit: float) -> bool:
+    return _for_both_sides(s, _arm_from_down, limit)
+
 Corrector = Callable[[_Skeleton, float], bool]
 
 _CORRECTORS: dict[str, Corrector] = {
@@ -215,10 +268,32 @@ _CORRECTORS: dict[str, Corrector] = {
     "knee_lockout": _knee_with_body,
     "arms_straight": _elbow,
     "start_knees": _knee_with_body,
-        # bicep curl
+    
+    # bicep curl
     "curl_top": _elbow,
     "curl_bottom": _elbow,
     "elbow_drift": _upper_arm,
+
+    # bench press
+    "bench_depth": _elbow,
+    "bench_lockout": _elbow,
+    "hips_lifted": _level_back,
+    "back_arch": _level_back,
+
+    # lateral raise
+    "raise_height": _raise_both,
+    "raise_too_high": _raise_both,
+    "arm_symmetry": _match_arms,
+    "elbow_bend": _elbows_both,
+
+    # lat pulldown
+    "pulldown_depth": _arms_from_down,
+    "pulldown_stretch": _elbows_both,
+    
+    # bent-over row
+    "row_top": _elbow,
+    "row_stretch": _elbow,
+    "row_hinge": _torso_tilt,
 }
 
 

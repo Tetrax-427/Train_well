@@ -40,15 +40,20 @@ class PathDeviationRule:
     """Violation if the hand strays from a straight line on the way up or down.
 
     Up-leg: lowest point before the top -> top. Down-leg: top -> end of rep.
+    With ``inverted`` the hands start high, go down and come back up (bench press), so the
+    legs are: highest point before the bottom -> bottom, and bottom -> end of rep.
     Distances are in torso lengths.
     """
 
     rule_id: str
     message: str
     limit: float
+    inverted: bool = False
 
     def evaluate(self, rep: Rep) -> FormViolation | None:
         track = _hand_track(rep.samples)
+        if self.inverted:
+            track = [(sample, x, -y) for sample, x, y in track]
         if len(track) < 3:
             return None
         top = max(range(len(track)), key=lambda i: track[i][2])

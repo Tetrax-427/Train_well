@@ -39,13 +39,61 @@ _ROLES: dict[str, tuple[str, ...]] = {
     "curl_bottom": ("shoulder", "elbow", "wrist"),
     "elbow_drift": ("hip", "shoulder", "elbow"),
     "torso_swing": ("shoulder", "hip"),
+
+    # bench press
+    "bench_depth": ("shoulder", "elbow", "wrist"),
+    "bench_lockout": ("shoulder", "elbow", "wrist"),
+    "hips_lifted": ("shoulder", "hip"),
+    "back_arch": ("shoulder", "hip"),
+    "bar_path": ("wrist",),
+    "bar_drift": ("wrist",),
+
+    # lateral raise
+    "raise_height": ("hip", "shoulder", "elbow"),
+    "raise_too_high": ("hip", "shoulder", "elbow"),
+    "arm_symmetry": ("shoulder", "elbow", "wrist"),
+    "elbow_bend": ("shoulder", "elbow", "wrist"),
+    "shrugging": ("ear", "shoulder"),
+    "body_sway": ("shoulder", "hip"),
+    
+    # plank
+    "support_position": ("shoulder", "elbow"),
+    "hold_steady": ("shoulder", "hip", "ankle"),
+
+    # lat pulldown
+    "pulldown_depth": ("shoulder", "elbow"),
+    "pulldown_stretch": ("shoulder", "elbow", "wrist"),
+    "grip_width": ("wrist",),
+    "bar_level": ("wrist",),
+    # incline / decline press
+    "bench_angle": ("shoulder", "hip"),
+    # hip thrust
+    "thrust_lockout": ("shoulder", "hip", "knee"),
+    "foot_placement": ("knee", "ankle", "heel", "toe"),
+    "thrust_tempo": ("hip",),
+    # bent-over row
+    "row_top": ("shoulder", "elbow", "wrist"),
+    "row_stretch": ("shoulder", "elbow", "wrist"),
+    "row_hinge": ("shoulder", "hip"),
+    # calf raise
+    "calf_height": ("ankle", "heel", "toe"),
+    "calf_tempo": ("heel", "toe"),
 }
+
+# Rules about both sides of the body at once (front-view exercises).
+_BILATERAL = frozenset({
+    "raise_height", "raise_too_high", "arm_symmetry", "elbow_bend", "shrugging", "body_sway",
+    "pulldown_depth", "pulldown_stretch", "grip_width", "bar_level",
+})
 
 
 def highlighted_landmarks(rule_id: str, side: BodySide) -> tuple[LandmarkId, ...]:
     """Landmarks to mark when showing a mistake. Unknown rules highlight nothing."""
-    joints = landmarks_for(side)
-    ear = LandmarkId.LEFT_EAR if side is BodySide.LEFT else LandmarkId.RIGHT_EAR
-    return tuple(
-        ear if role == "ear" else getattr(joints, role) for role in _ROLES.get(rule_id, ())
-    )
+    sides = (BodySide.LEFT, BodySide.RIGHT) if rule_id in _BILATERAL else (side,)
+    return tuple(_landmark(role, s) for s in sides for role in _ROLES.get(rule_id, ()))
+
+
+def _landmark(role: str, side: BodySide) -> LandmarkId:
+    if role == "ear":
+        return LandmarkId.LEFT_EAR if side is BodySide.LEFT else LandmarkId.RIGHT_EAR
+    return getattr(landmarks_for(side), role)

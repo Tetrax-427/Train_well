@@ -23,3 +23,6 @@ class Exercise:
     logged_features: tuple[str, ...] | None = None  # features written to logs; None = all
     position_hint: str = "Keep your whole body in frame"  # shown when the driver can't be measured
     explanations: Mapping[str, str] = field(default_factory=dict)  # rule_id -> why it matters
+    timed: bool = False  # a hold, not reps: the live panel shows a running hold timer
+    min_rep_ms: int = 300  # shortest movement that counts as a rep (or a hold)
+    pose_grace_ms: int = 0  # how long tracking may drop out mid-rep before the rep is discarded

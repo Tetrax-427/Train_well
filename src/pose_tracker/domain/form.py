@@ -207,3 +207,72 @@ class DriftFromRestRule:
         return FormViolation(
             self.rule_id, self.message, measured, self.limit, sample.timestamp_ms, sample.pose
         )
+
+@dataclass(frozen=True, slots=True)
+class MedianBandRule:
+    """Violation unless the typical (median) value over the whole rep sits inside [low, high]."""
+
+    rule_id: str
+    message: str
+    selector: Selector
+    low: float
+    high: float
+
+    def evaluate(self, rep: Rep) -> FormViolation | None:
+        scored = sorted(_scored(rep, self.selector), key=lambda item: item[0])
+        if not scored:
+            return None
+        value, sample = scored[len(scored) // 2]
+        if self.low <= value <= self.high:
+            return None
+        limit = self.low if value < self.low else self.high
+        return FormViolation(
+            self.rule_id, self.message, value, limit, sample.timestamp_ms, sample.pose
+        )
+
+@dataclass(frozen=True, slots=True)
+class BandAtPeakRule:
+    """Violation unless ``selector`` sits inside [low, high] at the rep's peak.
+
+    The peak is the sample where ``peak`` is largest (for example the top of a hip thrust,
+    where the hip angle is greatest).
+    """
+
+    rule_id: str
+    message: str
+    selector: Selector
+    peak: Selector
+    low: float
+    high: float
+
+    def evaluate(self, rep: Rep) -> FormViolation | None:
+        peaks = _scored(rep, self.peak)
+        if not peaks:
+            return None
+        _, sample = max(peaks, key=lambda item: item[0])
+        value = self.selector(sample.features)
+        if value is None or self.low <= value <= self.high:
+            return None
+        limit = self.low if value < self.low else self.high
+        return FormViolation(
+            self.rule_id, self.message, value, limit, sample.timestamp_ms, sample.pose
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class TempoRule:
+    """Violation if the rep is faster than ``min_seconds`` (bouncing or dropping the weight)."""
+
+    rule_id: str
+    message: str
+    min_seconds: float
+
+    def evaluate(self, rep: Rep) -> FormViolation | None:
+        seconds = rep.duration_ms / 1000
+        if seconds >= self.min_seconds:
+            return None
+        sample = rep.samples[len(rep.samples) // 2]
+        return FormViolation(
+            self.rule_id, self.message, seconds, self.min_seconds,
+            sample.timestamp_ms, sample.pose,
+        )

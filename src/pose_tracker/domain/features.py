@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from pose_tracker.domain.body_side import BodySide, SideLandmarks, landmarks_for
-from pose_tracker.domain.geometry import Point2D, angle_at, distance, to_point
+from pose_tracker.domain.geometry import Point2D, angle_at, distance, midpoint, to_point
 from pose_tracker.domain.pose import LandmarkId, Pose
 
 
@@ -33,12 +34,36 @@ class BodyFeatures:
     bar_offset: float | None = None  # wrist vs mid-foot, torso lengths; > 0 = ahead of mid-foot
     # Curl measurement
     upper_arm_angle: float | None = None  # hip-shoulder-elbow; 0 = arm hanging along the torso
+    # Bench press measurement
+    back_tilt_deg: float | None = None  # shoulder-hip line vs horizontal; > 0 = hips higher
+    # Plank measurement
+    elbow_offset: float | None = None  # elbow vs shoulder along the body, torso lengths; > 0 = ahead
+    # Lateral raise measurements (front view, both arms)
+    arm_raise_deg: float | None = None  # mean hip-shoulder-elbow angle; 0 = arms at the sides
+    arm_asymmetry_deg: float | None = None  # |left - right| arm raise
+    arm_bend_deg: float | None = None  # smallest shoulder-elbow-wrist angle of the two arms
+    shrug_ratio: float | None = None  # shoulder-to-ear height / shoulder-to-hip length
+    trunk_sway_deg: float | None = None  # shoulder-mid to hip-mid line vs vertical; > 0 = image-right
+    # Lat pulldown measurements (front view, both arms)
+    arm_elevation_deg: float | None = None  # mean upper-arm angle from straight down; 180 = overhead
+    grip_ratio: float | None = None  # horizontal wrist spacing / shoulder width
+    wrist_gap: float | None = None  # |left wrist height - right wrist height| / shoulder width
+    # Hip thrust measurement
+    shin_angle_deg: float | None = None  # shin angle from vertical; 0 = shin vertical
+    # Calf raise measurement
+    foot_angle_deg: float | None = None  # heel-to-toe line vs horizontal; > 0 = heel raised
+
+_SIDES = (BodySide.LEFT, BodySide.RIGHT)
+
 
 def compute_features(
     pose: Pose, side: BodySide, aspect_ratio: float, min_visibility: float
 ) -> BodyFeatures:
     joints = landmarks_for(side)
     hand_x, hand_y = _hand_position(pose, joints, aspect_ratio, min_visibility)
+    raises = [_arm_raise(pose, s, aspect_ratio, min_visibility) for s in _SIDES]
+    bends = [_arm_bend(pose, s, aspect_ratio, min_visibility) for s in _SIDES]
+    shrugs = [_shrug_ratio(pose, s, aspect_ratio, min_visibility) for s in _SIDES]
     return BodyFeatures(
         knee_angle=_joint_angle(
             pose, (joints.hip, joints.knee, joints.ankle), aspect_ratio, min_visibility
@@ -58,7 +83,7 @@ def compute_features(
         neck_angle=_joint_angle(
             pose, (_ear_id(side), joints.shoulder, joints.hip), aspect_ratio, min_visibility
         ),
-                hip_angle=_joint_angle(
+        hip_angle=_joint_angle(
             pose, (joints.shoulder, joints.hip, joints.knee), aspect_ratio, min_visibility
         ),
         torso_thigh_ratio=_torso_thigh_ratio(pose, joints, aspect_ratio, min_visibility),
@@ -66,7 +91,26 @@ def compute_features(
         upper_arm_angle=_joint_angle(
             pose, (joints.hip, joints.shoulder, joints.elbow), aspect_ratio, min_visibility
         ),
+        back_tilt_deg=_back_tilt(pose, joints, aspect_ratio, min_visibility),
+        elbow_offset=_offset_along_body(
+            pose, joints, joints.elbow, aspect_ratio, min_visibility
+        ),
+        arm_raise_deg=_mean(raises),
+        arm_asymmetry_deg=_asymmetry(raises),
+        arm_bend_deg=_least(bends),
+        shrug_ratio=_mean(shrugs),
+        trunk_sway_deg=_trunk_sway(pose, aspect_ratio, min_visibility),
+                arm_elevation_deg=_mean(
+            [_arm_elevation(pose, s, aspect_ratio, min_visibility) for s in _SIDES]
+        ),
+        grip_ratio=_grip_ratio(pose, aspect_ratio, min_visibility),
+        wrist_gap=_wrist_gap(pose, aspect_ratio, min_visibility),
+        shin_angle_deg=_shin_angle(pose, joints, aspect_ratio, min_visibility),
+        foot_angle_deg=_foot_angle(pose, joints, aspect_ratio, min_visibility),
     )
+
+
+# -- building blocks -------------------------------------------------------------------
 
 
 def _points(
@@ -91,6 +135,28 @@ def _joint_angle(
         return None
 
 
+def _ear_id(side: BodySide) -> LandmarkId:
+    return LandmarkId.LEFT_EAR if side is BodySide.LEFT else LandmarkId.RIGHT_EAR
+
+
+def _mean(values: Sequence[float | None]) -> float | None:
+    present = [value for value in values if value is not None]
+    return sum(present) / len(present) if present else None
+
+
+def _least(values: Sequence[float | None]) -> float | None:
+    present = [value for value in values if value is not None]
+    return min(present) if present else None
+
+
+def _asymmetry(raises: Sequence[float | None]) -> float | None:
+    left, right = raises
+    return None if left is None or right is None else abs(left - right)
+
+
+# -- torso and facing ------------------------------------------------------------------
+
+
 def _torso_lean(
     pose: Pose, shoulder_id: LandmarkId, hip_id: LandmarkId,
     aspect_ratio: float, min_visibility: float,
@@ -112,13 +178,15 @@ def _facing(pose: Pose, side: BodySide, min_visibility: float) -> int | None:
     Feet are the stronger signal (heel -> toe); nose vs ear is the fallback.
     """
     joints = landmarks_for(side)
-    ear = LandmarkId.LEFT_EAR if side is BodySide.LEFT else LandmarkId.RIGHT_EAR
     for back_id, front_id, margin in (
         (joints.heel, joints.toe, 0.02),
-        (ear, LandmarkId.NOSE, 0.008),
+        (_ear_id(side), LandmarkId.NOSE, 0.008),
     ):
         back, front = pose.get(back_id), pose.get(front_id)
-        if min(back.visibility, front.visibility) >= min_visibility and abs(front.x - back.x) >= margin:
+        if (
+            min(back.visibility, front.visibility) >= min_visibility
+            and abs(front.x - back.x) >= margin
+        ):
             return 1 if front.x > back.x else -1
     return None
 
@@ -138,7 +206,10 @@ def _torso_layback(
     up = hip.y - shoulder.y
     if forward == 0.0 and up == 0.0:
         return None
-    return math.degrees(math.atan2(0.0 - forward, up))
+    return math.degrees(math.atan2(-forward, up))
+
+
+# -- hands and arms --------------------------------------------------------------------
 
 
 def _hand_position(
@@ -155,8 +226,56 @@ def _hand_position(
         return None, None
     return (wrist.x - hip.x) / torso, (hip.y - wrist.y) / torso
 
-def _ear_id(side: BodySide) -> LandmarkId:
-    return LandmarkId.LEFT_EAR if side is BodySide.LEFT else LandmarkId.RIGHT_EAR
+
+def _hand_offset(
+    pose: Pose, joints: SideLandmarks, aspect_ratio: float, min_visibility: float
+) -> float | None:
+    return _offset_along_body(pose, joints, joints.wrist, aspect_ratio, min_visibility)
+
+
+def _offset_along_body(
+    pose: Pose, joints: SideLandmarks, point_id: LandmarkId,
+    aspect_ratio: float, min_visibility: float,
+) -> float | None:
+    """A point's position relative to the shoulder along the body, in torso lengths.
+
+    Positive means ahead of the shoulder (toward the head).
+    """
+    points = _points(
+        pose, (joints.shoulder, joints.hip, point_id, joints.ankle), aspect_ratio, min_visibility
+    )
+    if points is None:
+        return None
+    shoulder, hip, point, ankle = points
+    torso, axis = distance(shoulder, hip), distance(shoulder, ankle)
+    if torso == 0.0 or axis == 0.0:
+        return None
+    toward_head = ((shoulder.x - ankle.x) / axis, (shoulder.y - ankle.y) / axis)
+    along = (point.x - shoulder.x) * toward_head[0] + (point.y - shoulder.y) * toward_head[1]
+    return along / torso
+
+
+def _bar_offset(
+    pose: Pose, side: BodySide, joints: SideLandmarks, aspect_ratio: float, min_visibility: float
+) -> float | None:
+    """Horizontal distance of the wrist from mid-foot in torso lengths, positive ahead of the feet."""
+    facing = _facing(pose, side, min_visibility)
+    if facing is None:
+        return None
+    points = _points(
+        pose, (joints.shoulder, joints.hip, joints.wrist, joints.heel, joints.toe),
+        aspect_ratio, min_visibility,
+    )
+    if points is None:
+        return None
+    shoulder, hip, wrist, heel, toe = points
+    torso = distance(shoulder, hip)
+    if torso == 0.0:
+        return None
+    return facing * (wrist.x - (heel.x + toe.x) / 2) / torso
+
+
+# -- body line (push-up, plank, bench press, deadlift) ---------------------------------
 
 
 def _body_incline(
@@ -193,33 +312,14 @@ def _hip_sag(
     return deviation if hip.y > line_y else -deviation  # image y grows downward
 
 
-def _hand_offset(
-    pose: Pose, joints: SideLandmarks, aspect_ratio: float, min_visibility: float
-) -> float | None:
-    """Wrist position relative to the shoulder along the body axis, in torso lengths.
-
-    Positive means the hand is ahead of the shoulder (toward the head).
-    """
-    points = _points(
-        pose, (joints.shoulder, joints.hip, joints.wrist, joints.ankle),
-        aspect_ratio, min_visibility,
-    )
-    if points is None:
-        return None
-    shoulder, hip, wrist, ankle = points
-    torso, axis = distance(shoulder, hip), distance(shoulder, ankle)
-    if torso == 0.0 or axis == 0.0:
-        return None
-    toward_head = ((shoulder.x - ankle.x) / axis, (shoulder.y - ankle.y) / axis)
-    along = (wrist.x - shoulder.x) * toward_head[0] + (wrist.y - shoulder.y) * toward_head[1]
-    return along / torso
-
 def _torso_thigh_ratio(
     pose: Pose, joints: SideLandmarks, aspect_ratio: float, min_visibility: float
 ) -> float | None:
     """Both segments lie in the sagittal plane, so for a rigid back this ratio is constant
     whatever the posture. A rounded or arched spine shortens the shoulder-hip chord."""
-    points = _points(pose, (joints.shoulder, joints.hip, joints.knee), aspect_ratio, min_visibility)
+    points = _points(
+        pose, (joints.shoulder, joints.hip, joints.knee), aspect_ratio, min_visibility
+    )
     if points is None:
         return None
     shoulder, hip, knee = points
@@ -229,21 +329,153 @@ def _torso_thigh_ratio(
     return distance(shoulder, hip) / thigh
 
 
-def _bar_offset(
-    pose: Pose, side: BodySide, joints: SideLandmarks, aspect_ratio: float, min_visibility: float
+def _back_tilt(
+    pose: Pose, joints: SideLandmarks, aspect_ratio: float, min_visibility: float
 ) -> float | None:
-    """Horizontal distance of the wrist from mid-foot in torso lengths, positive ahead of the feet."""
-    facing = _facing(pose, side, min_visibility)
-    if facing is None:
+    """Shoulder-to-hip line against horizontal, in degrees.
+
+    Positive when the hips are higher than the shoulders, negative when lower. About 0 when
+    lying flat, about -90 when standing.
+    """
+    points = _points(pose, (joints.shoulder, joints.hip), aspect_ratio, min_visibility)
+    if points is None:
         return None
+    shoulder, hip = points
+    rise, run = shoulder.y - hip.y, abs(hip.x - shoulder.x)
+    if rise == 0.0 and run == 0.0:
+        return None
+    return math.degrees(math.atan2(rise, run))
+
+
+# -- front-view measurements (lateral raise) -------------------------------------------
+
+
+def _arm_raise(
+    pose: Pose, side: BodySide, aspect_ratio: float, min_visibility: float
+) -> float | None:
+    """Upper arm against the torso line (hip-shoulder-elbow): 0 = at the side, 90 = level."""
+    joints = landmarks_for(side)
+    return _joint_angle(
+        pose, (joints.hip, joints.shoulder, joints.elbow), aspect_ratio, min_visibility
+    )
+
+
+def _arm_bend(
+    pose: Pose, side: BodySide, aspect_ratio: float, min_visibility: float
+) -> float | None:
+    joints = landmarks_for(side)
+    return _joint_angle(
+        pose, (joints.shoulder, joints.elbow, joints.wrist), aspect_ratio, min_visibility
+    )
+
+
+def _shrug_ratio(
+    pose: Pose, side: BodySide, aspect_ratio: float, min_visibility: float
+) -> float | None:
+    """Shoulder-to-ear height over shoulder-to-hip length; it shrinks when the shoulders rise."""
+    joints = landmarks_for(side)
     points = _points(
-        pose, (joints.shoulder, joints.hip, joints.wrist, joints.heel, joints.toe),
-        aspect_ratio, min_visibility,
+        pose, (_ear_id(side), joints.shoulder, joints.hip), aspect_ratio, min_visibility
     )
     if points is None:
         return None
-    shoulder, hip, wrist, heel, toe = points
+    ear, shoulder, hip = points
     torso = distance(shoulder, hip)
     if torso == 0.0:
         return None
-    return facing * (wrist.x - (heel.x + toe.x) / 2) / torso
+    return (shoulder.y - ear.y) / torso
+
+
+def _trunk_sway(pose: Pose, aspect_ratio: float, min_visibility: float) -> float | None:
+    """Sideways lean of the line from the middle of the hips to the middle of the shoulders."""
+    ids = (
+        LandmarkId.LEFT_SHOULDER, LandmarkId.RIGHT_SHOULDER,
+        LandmarkId.LEFT_HIP, LandmarkId.RIGHT_HIP,
+    )
+    points = _points(pose, ids, aspect_ratio, min_visibility)
+    if points is None:
+        return None
+    left_shoulder, right_shoulder, left_hip, right_hip = points
+    shoulders, hips = midpoint(left_shoulder, right_shoulder), midpoint(left_hip, right_hip)
+    sideways, up = shoulders.x - hips.x, hips.y - shoulders.y
+    if sideways == 0.0 and up == 0.0:
+        return None
+    return math.degrees(math.atan2(sideways, up))
+
+# -- lat pulldown, hip thrust and calf raise measurements --------------------------------
+
+
+def _arm_elevation(
+    pose: Pose, side: BodySide, aspect_ratio: float, min_visibility: float
+) -> float | None:
+    """Upper arm against straight down: 0 = hanging at the side, 90 = level, 180 = overhead."""
+    joints = landmarks_for(side)
+    points = _points(pose, (joints.shoulder, joints.elbow), aspect_ratio, min_visibility)
+    if points is None:
+        return None
+    shoulder, elbow = points
+    try:
+        return angle_at(elbow, shoulder, Point2D(shoulder.x, shoulder.y + 1.0))
+    except ValueError:
+        return None
+
+
+def _wrists_and_shoulder_width(
+    pose: Pose, aspect_ratio: float, min_visibility: float
+) -> tuple[float, Point2D, Point2D] | None:
+    ids = (
+        LandmarkId.LEFT_SHOULDER, LandmarkId.RIGHT_SHOULDER,
+        LandmarkId.LEFT_WRIST, LandmarkId.RIGHT_WRIST,
+    )
+    points = _points(pose, ids, aspect_ratio, min_visibility)
+    if points is None:
+        return None
+    left_shoulder, right_shoulder, left_wrist, right_wrist = points
+    width = distance(left_shoulder, right_shoulder)
+    if width == 0.0:
+        return None
+    return width, left_wrist, right_wrist
+
+
+def _grip_ratio(pose: Pose, aspect_ratio: float, min_visibility: float) -> float | None:
+    found = _wrists_and_shoulder_width(pose, aspect_ratio, min_visibility)
+    if found is None:
+        return None
+    width, left, right = found
+    return abs(left.x - right.x) / width
+
+
+def _wrist_gap(pose: Pose, aspect_ratio: float, min_visibility: float) -> float | None:
+    found = _wrists_and_shoulder_width(pose, aspect_ratio, min_visibility)
+    if found is None:
+        return None
+    width, left, right = found
+    return abs(left.y - right.y) / width
+
+
+def _shin_angle(
+    pose: Pose, joints: SideLandmarks, aspect_ratio: float, min_visibility: float
+) -> float | None:
+    """Shin against vertical in degrees; 0 = the knee is straight above the ankle."""
+    points = _points(pose, (joints.knee, joints.ankle), aspect_ratio, min_visibility)
+    if points is None:
+        return None
+    knee, ankle = points
+    try:
+        return angle_at(knee, ankle, Point2D(ankle.x, ankle.y - 1.0))
+    except ValueError:
+        return None
+
+
+def _foot_angle(
+    pose: Pose, joints: SideLandmarks, aspect_ratio: float, min_visibility: float
+) -> float | None:
+    """Heel-to-toe line against horizontal; positive when the heel is higher than the toe."""
+    points = _points(pose, (joints.heel, joints.toe), aspect_ratio, min_visibility)
+    if points is None:
+        return None
+    heel, toe = points
+    run, rise = abs(toe.x - heel.x), toe.y - heel.y
+    if run == 0.0 and rise == 0.0:
+        return None
+    return math.degrees(math.atan2(rise, run))
