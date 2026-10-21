@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -15,15 +16,16 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from pose_tracker.application.progress_presenter import ProgressPresenter
+from pose_tracker.application.routine_presenter import RoutinePresenter
 from pose_tracker.application.session_controller import SessionPhase
 from pose_tracker.application.session_summary import build_summary
 from pose_tracker.application.training_presenter import LiveState, TrainingPresenter
-from pose_tracker.errors import SessionStateError
+from pose_tracker.errors import PersistenceError, SessionStateError
 from pose_tracker.ui.capture_thread import CapturedFrame, CaptureThread
 from pose_tracker.ui.live_panel import LivePanel
 from pose_tracker.ui.summary_view import SummaryView
 from pose_tracker.ui.video_widget import VideoWidget
-from pose_tracker.application.progress_presenter import ProgressPresenter
 
 _BANNER_BASE = "border-radius: 8px; padding: 10px; font-size: 16px; font-weight: 600;"
 _BANNER_NORMAL = f"background: #161b22; border: 1px solid #30363d; color: #e6edf3; {_BANNER_BASE}"
@@ -31,32 +33,37 @@ _BANNER_WARNING = f"background: #3b2300; border: 1px solid #9e6a03; color: #f0b7
 
 
 class TrainView(QWidget):
-    """The Train tab: exercise list, live video, live panel, session summary and controls."""
-
-    exit_requested = Signal()
+    """The Train tab: routine and exercise lists, live video, live panel, summary and controls."""
 
     def __init__(
         self,
         presenter: TrainingPresenter,
         capture: CaptureThread,
         progress: ProgressPresenter,
+        routines: RoutinePresenter,
         parent: QWidget | None = None,
     ) -> None:
-        
         super().__init__(parent)
         self._presenter = presenter
         self._capture = capture
+        self._routines = routines
         self._camera_failed = False
         self._banner_warning: bool | None = None
-        self._keys = [exercise.key for exercise in presenter.exercises]
-        
+        self._keys: list[str] = []
+
+        caption = QLabel("ROUTINE")
+        caption.setObjectName("caption")
+        self._routine = QComboBox()
+        self._routine.currentIndexChanged.connect(lambda _index: self._fill_exercises())
         self._exercises = QListWidget()
-        self._exercises.setFixedWidth(200)
-        for exercise in presenter.exercises:
-            item = QListWidgetItem(exercise.name)
-            item.setData(Qt.ItemDataRole.UserRole, exercise.key)
-            self._exercises.addItem(item)
         self._exercises.itemClicked.connect(self._on_exercise_clicked)
+        picker = QVBoxLayout()
+        picker.addWidget(caption)
+        picker.addWidget(self._routine)
+        picker.addWidget(self._exercises, 1)
+        picker_host = QWidget()
+        picker_host.setLayout(picker)
+        picker_host.setFixedWidth(220)
 
         self._video = VideoWidget()
         self._banner = QLabel()
@@ -86,17 +93,13 @@ class TrainView(QWidget):
         self._stop = QPushButton("Stop")
         self._stop.setObjectName("danger")
         self._stop.clicked.connect(self._stop_session)
-        exit_button = QPushButton("Exit")
-        exit_button.clicked.connect(self.exit_requested)
-
         bar = QHBoxLayout()
         bar.addWidget(self._start)
         bar.addWidget(self._stop)
         bar.addStretch(1)
-        bar.addWidget(exit_button)
 
         body = QHBoxLayout()
-        body.addWidget(self._exercises)
+        body.addWidget(picker_host)
         body.addWidget(self._pages, 1)
         root = QVBoxLayout(self)
         root.addLayout(body, 1)
@@ -104,7 +107,46 @@ class TrainView(QWidget):
 
         capture.frame_ready.connect(self._on_frame)
         capture.stopped.connect(self._on_capture_stopped)
-        self._apply(presenter.state())
+        self.refresh_routines()  # fills the lists and shows the initial state
+
+    # -- routines --------------------------------------------------------------------
+
+    def refresh_routines(self) -> None:
+        """Reload the routine choices, keeping the current one if it still exists."""
+        current = self._routine.currentData()
+        try:
+            options = self._routines.routine_options()
+        except PersistenceError:
+            options = ((None, "All exercises"),)
+        self._routine.blockSignals(True)
+        self._routine.clear()
+        for routine_id, name in options:
+            self._routine.addItem(name, routine_id)
+        self._routine.setCurrentIndex(max(self._routine.findData(current), 0))
+        self._routine.blockSignals(False)
+        self._fill_exercises()
+
+    def show_routine(self, routine_id: int) -> None:
+        """Show only this routine's exercises. Ignored while a set is running."""
+        if not self._presenter.state().can_select:
+            return
+        self.refresh_routines()
+        index = self._routine.findData(routine_id)
+        if index >= 0:
+            self._routine.setCurrentIndex(index)
+
+    def _fill_exercises(self) -> None:
+        try:
+            options = self._routines.exercises_for(self._routine.currentData())
+        except PersistenceError:
+            options = self._routines.exercise_options()
+        self._exercises.clear()
+        for key, name in options:
+            item = QListWidgetItem(name)
+            item.setData(Qt.ItemDataRole.UserRole, key)
+            self._exercises.addItem(item)
+        self._keys = [key for key, _ in options]
+        self._apply(self._presenter.state())  # restores the highlighted exercise
 
     # -- lifecycle -------------------------------------------------------------------
 
@@ -187,6 +229,7 @@ class TrainView(QWidget):
             self._banner_warning = state.banner_warning
             self._banner.setStyleSheet(_BANNER_WARNING if state.banner_warning else _BANNER_NORMAL)
 
+        self._routine.setEnabled(state.can_select)
         self._exercises.setEnabled(state.can_select)
         self._start.setEnabled(state.can_start and not self._camera_failed)
         self._stop.setEnabled(state.can_stop)
