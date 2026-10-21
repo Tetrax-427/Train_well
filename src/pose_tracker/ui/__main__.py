@@ -14,6 +14,7 @@ from pose_tracker.application.geometric_reference import GeometricReferenceProvi
 from pose_tracker.application.history_presenter import HistoryPresenter
 from pose_tracker.application.history_recorder import HistoryRepRecorder
 from pose_tracker.application.progress_presenter import ProgressPresenter
+from pose_tracker.application.routine_presenter import RoutinePresenter
 from pose_tracker.application.session_controller import SessionController
 from pose_tracker.application.smoothed_estimator import SmoothedPoseEstimator
 from pose_tracker.application.training_presenter import TrainingPresenter
@@ -28,12 +29,14 @@ from pose_tracker.infrastructure.opencv_camera import OpenCvCamera
 from pose_tracker.infrastructure.opencv_frame_encoder import OpenCvJpegEncoder
 from pose_tracker.infrastructure.opencv_renderer import OpenCvPoseRenderer
 from pose_tracker.infrastructure.opencv_snapshot_painter import OpenCvSnapshotPainter
+from pose_tracker.infrastructure.sqlite_routine_repository import SqliteRoutineRepository
 from pose_tracker.infrastructure.sqlite_session_repository import SqliteSessionRepository
 from pose_tracker.infrastructure.text_rep_recorder import TextFileRepRecorder
 from pose_tracker.ui.capture_thread import CaptureThread
 from pose_tracker.ui.history_view import HistoryView
 from pose_tracker.ui.main_window import MainWindow
 from pose_tracker.ui.progress_view import ProgressView
+from pose_tracker.ui.routines_view import RoutinesView
 from pose_tracker.ui.theme import STYLE_SHEET
 from pose_tracker.ui.train_view import TrainView
 
@@ -81,6 +84,9 @@ def main() -> int:
                 config.history_dir / "history.db",
                 FileSnapshotStore(config.history_dir / "snapshots"),
             )))
+            routine_repository = stack.enter_context(closing(
+                SqliteRoutineRepository(config.history_dir / "routines.db")
+            ))
 
             def new_recorder() -> SessionRepRecorder:
                 return SessionRepRecorder(
@@ -98,6 +104,7 @@ def main() -> int:
             )
             names = {exercise.key: exercise.name for exercise in catalog.values()}
             progress = ProgressPresenter(repository, repository, names)
+            routines = RoutinePresenter(routine_repository, names)
             presenter = TrainingPresenter(
                 controller,
                 frame_buffer,
@@ -111,7 +118,8 @@ def main() -> int:
             )
             window = MainWindow(
                 config.window_name,
-                TrainView(presenter, CaptureThread(camera, estimator), progress),
+                TrainView(presenter, CaptureThread(camera, estimator), progress, routines),
+                RoutinesView(routines),
                 history_view,
                 ProgressView(progress),
             )

@@ -11,7 +11,7 @@ from pose_tracker.domain.frame import Frame
 from pose_tracker.domain.history import RepRecord, SessionSummary, StoredSession
 from pose_tracker.domain.pose import LandmarkId, Pose
 from pose_tracker.domain.progress import ProgressEntry, ProgressSet
-
+from pose_tracker.domain.routine import Routine
 
 class FrameSource(Protocol):
     def read(self) -> Frame | None:
@@ -136,3 +136,17 @@ class ProgressReader(Protocol):
 
     def latest_progress_day(self, exercise_key: str) -> list[ProgressSet]:
         """All saved sets of the most recent day that has any, oldest first."""
+
+class RoutineStore(Protocol):
+    def list_routines(self) -> list[Routine]:
+        """All routines, oldest first."""
+
+    def get_routine(self, routine_id: int) -> Routine | None: ...
+
+    def create_routine(self, name: str, exercise_keys: Sequence[str]) -> Routine:
+        """Raises ValueError if the name is already taken."""
+
+    def update_routine(self, routine_id: int, name: str, exercise_keys: Sequence[str]) -> None:
+        """Raises ValueError if another routine has the name."""
+
+    def delete_routine(self, routine_id: int) -> None: ...
