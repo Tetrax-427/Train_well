@@ -4,6 +4,7 @@ import sqlite3
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
+import threading
 
 from pose_tracker.domain.routine import Routine
 from pose_tracker.errors import PersistenceError
@@ -30,9 +31,10 @@ class SqliteRoutineRepository:
     """Routines in their own SQLite file. Used from the UI thread only."""
 
     def __init__(self, db_path: Path) -> None:
+        self._lock = threading.RLock()
         try:
             db_path.parent.mkdir(parents=True, exist_ok=True)
-            self._conn = sqlite3.connect(db_path)
+            self._conn = sqlite3.connect(db_path, check_same_thread=False)
         except (OSError, sqlite3.Error) as exc:
             raise PersistenceError(f"Cannot open the routines database at {db_path}") from exc
         try:
@@ -97,7 +99,8 @@ class SqliteRoutineRepository:
             db.execute("DELETE FROM routines WHERE id = ?", (routine_id,))
 
     def close(self) -> None:
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
 
     # -- internals -------------------------------------------------------------------
 
@@ -112,12 +115,12 @@ class SqliteRoutineRepository:
 
     @contextmanager
     def _db(self) -> Iterator[sqlite3.Connection]:
-        try:
-            with self._conn:  # commits on success, rolls back on any error
-                yield self._conn
-        except sqlite3.Error as exc:
-            raise PersistenceError("Routines database operation failed") from exc
-
+        with self._lock:
+            try:
+                with self._conn:  # commits on success, rolls back on any error
+                    yield self._conn
+            except sqlite3.Error as exc:
+                raise PersistenceError("Routines database operation failed") from exc
     @staticmethod
     def _require_free_name(db: sqlite3.Connection, name: str, own_id: int | None) -> None:
         row = db.execute("SELECT id FROM routines WHERE name = ? COLLATE NOCASE", (name,)).fetchone()
