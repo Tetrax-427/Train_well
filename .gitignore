@@ -27,3 +27,5 @@ sessions/
 history/
 sessions/
 __pycache__/
+
+llm.toml
