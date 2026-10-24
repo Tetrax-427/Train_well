@@ -3,8 +3,8 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Protocol
-from collections.abc import Callable, Collection, Sequence
+from typing import Any, Protocol
+from collections.abc import Callable, Collection, Mapping, Sequence
 import numpy as np
 
 from pose_tracker.domain.frame import Frame
@@ -12,6 +12,7 @@ from pose_tracker.domain.history import RepRecord, SessionSummary, StoredSession
 from pose_tracker.domain.pose import LandmarkId, Pose
 from pose_tracker.domain.progress import ProgressEntry, ProgressSet
 from pose_tracker.domain.routine import Routine
+from pose_tracker.domain.chat import ChatMessage, LlmReply, ToolSpec
 
 class FrameSource(Protocol):
     def read(self) -> Frame | None:
@@ -150,3 +151,15 @@ class RoutineStore(Protocol):
         """Raises ValueError if another routine has the name."""
 
     def delete_routine(self, routine_id: int) -> None: ...
+
+class LlmClient(Protocol):
+    def complete(self, messages: Sequence[ChatMessage], tools: Sequence[ToolSpec]) -> LlmReply:
+        """One model call. Raises LlmError if the provider cannot be reached or misbehaves."""
+
+
+class ChatTool(Protocol):
+    @property
+    def spec(self) -> ToolSpec: ...
+
+    def run(self, arguments: Mapping[str, Any]) -> Any:
+        """Return JSON-serializable data. Raises ToolArgumentError for unusable arguments."""

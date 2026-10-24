@@ -55,3 +55,39 @@ class AppConfig:
     bent_over_row: BentOverRowSettings = BentOverRowSettings()
     calf_raise: CalfRaiseSettings = CalfRaiseSettings()
     calibration_file: Path = Path("calibration.toml")
+    llm_file: Path = Path("llm.toml")
+
+
+@dataclass(frozen=True, slots=True)
+class LlmSettings:
+    """Chat assistant backend: any server that speaks the OpenAI chat-completions API."""
+
+    base_url: str = "http://localhost:8080/v1"
+    model: str = "local-model"
+    api_key: str = ""
+    timeout_s: float = 120.0
+    temperature: float = 0.3
+    max_tokens: int = 1024           # reply length cap; 0 = the server's default
+    context_tokens: int = 2048       # the context size your server was started with
+    max_tool_steps: int = 6          # rounds of tool calls allowed per question
+    max_history_turns: int = 8       # earlier question/answer pairs sent with each request
+
+    def __post_init__(self) -> None:
+        if not self.base_url.startswith(("http://", "https://")):
+            raise ValueError("base_url must start with http:// or https://")
+        if not self.model.strip():
+            raise ValueError("model must not be empty")
+        if self.timeout_s <= 0:
+            raise ValueError("timeout_s must be more than 0")
+        if not 0.0 <= self.temperature <= 2.0:
+            raise ValueError("temperature must be between 0 and 2")
+        if self.max_tokens < 0:
+            raise ValueError("max_tokens must be 0 or more")
+        if self.context_tokens < 1024:
+            raise ValueError("context_tokens must be at least 1024")
+        if not 1 <= self.max_tool_steps <= 20:
+            raise ValueError("max_tool_steps must be between 1 and 20")
+        if not 1 <= self.max_history_turns <= 50:
+            raise ValueError("max_history_turns must be between 1 and 50")
+
+        

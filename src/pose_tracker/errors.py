@@ -18,3 +18,14 @@ class SessionStateError(PoseTrackerError):
 
 class CalibrationError(PoseTrackerError):
     """calibration.toml could not be read or holds invalid settings."""
+
+class LlmError(PoseTrackerError):
+    """The language-model server could not be reached or sent an unusable reply."""
+
+
+class LlmConfigError(PoseTrackerError):
+    """llm.toml could not be read or holds invalid settings."""
+
+
+class ChatError(PoseTrackerError):
+    """The assistant could not finish answering."""
