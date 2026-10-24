@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QCloseEvent
-from PySide6.QtWidgets import QMainWindow, QTabWidget
+from PySide6.QtWidgets import QMainWindow, QPushButton, QTabWidget
 
+from pose_tracker.ui.chat_view import ChatView
 from pose_tracker.ui.history_view import HistoryView
 from pose_tracker.ui.progress_view import ProgressView
 from pose_tracker.ui.routines_view import RoutinesView
@@ -17,6 +19,7 @@ class MainWindow(QMainWindow):
         routines_view: RoutinesView,
         history_view: HistoryView,
         progress_view: ProgressView,
+        chat_view: ChatView,
     ) -> None:
         super().__init__()
         self.setWindowTitle(title)
@@ -30,10 +33,15 @@ class MainWindow(QMainWindow):
         self._tabs.addTab(routines_view, "Routines")
         self._tabs.addTab(history_view, "History")
         self._tabs.addTab(progress_view, "Progress")
+        self._tabs.addTab(chat_view, "Chat")
         self._tabs.currentChanged.connect(self._on_tab_changed)
+
+        exit_button = QPushButton("Exit")
+        exit_button.setObjectName("danger")  # the red button style from the theme
+        exit_button.clicked.connect(self.close)
+        self._tabs.setCornerWidget(exit_button, Qt.Corner.TopRightCorner)
         self.setCentralWidget(self._tabs)
 
-        train_view.exit_requested.connect(self.close)
         routines_view.routines_changed.connect(train_view.refresh_routines)
         routines_view.train_requested.connect(self._train_routine)
         history_view.refresh()

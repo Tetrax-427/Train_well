@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import sys
 from contextlib import ExitStack, closing
-
+from datetime import datetime
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from pose_tracker.application.calibration import calibrate, summarize
@@ -19,6 +19,7 @@ from pose_tracker.application.session_controller import SessionController
 from pose_tracker.application.smoothed_estimator import SmoothedPoseEstimator
 from pose_tracker.application.training_presenter import TrainingPresenter
 from pose_tracker.config import AppConfig
+from pose_tracker.errors import CalibrationError, LlmConfigError, PoseTrackerError
 from pose_tracker.domain.pose_smoother import PoseSmoother
 from pose_tracker.domain.view import StableViewDetector, ViewDetector
 from pose_tracker.errors import CalibrationError, PoseTrackerError
@@ -39,9 +40,30 @@ from pose_tracker.ui.progress_view import ProgressView
 from pose_tracker.ui.routines_view import RoutinesView
 from pose_tracker.ui.theme import STYLE_SHEET
 from pose_tracker.ui.train_view import TrainView
+from pose_tracker.application.chat.digest import TrainingDigest
+from pose_tracker.application.chat.budget import estimate_tokens, plan_budget, tools_tokens
+from pose_tracker.application.chat.agent import ChatAgent
+from pose_tracker.application.chat.llm_settings import parse_llm_settings
+from pose_tracker.application.chat.system_prompt import build_system_prompt
+from pose_tracker.application.chat.tool_registry import ToolRegistry
+from pose_tracker.application.chat.tools import default_tools
+from pose_tracker.application.chat.unavailable_llm import UnavailableLlmClient
+from pose_tracker.infrastructure.llm_settings_file import read_llm_settings_file
+from pose_tracker.infrastructure.openai_compatible_client import OpenAiCompatibleClient
+from pose_tracker.interfaces import LlmClient
+from pose_tracker.ui.chat_view import ChatView
 
 logger = logging.getLogger(__name__)
 
+
+def _llm_client(config: AppConfig) -> tuple[LlmClient, LlmSettings]:
+    """The chat backend. A broken llm.toml disables only the Chat tab, not the app."""
+    try:
+        settings = parse_llm_settings(read_llm_settings_file(config.llm_file), config.llm_file)
+    except LlmConfigError as exc:
+        logger.error("%s", exc)
+        return UnavailableLlmClient(str(exc)), LlmSettings()
+    return OpenAiCompatibleClient(settings), settings
 
 def main() -> int:
     logging.basicConfig(
@@ -105,6 +127,35 @@ def main() -> int:
             names = {exercise.key: exercise.name for exercise in catalog.values()}
             progress = ProgressPresenter(repository, repository, names)
             routines = RoutinePresenter(routine_repository, names)
+            llm, llm_settings = _llm_client(base)
+            today = datetime.now().date()
+            all_tools = ToolRegistry(default_tools(
+                catalog, repository, repository, routine_repository, datetime.now
+            ))
+            budget = plan_budget(
+                llm_settings.context_tokens,
+                llm_settings.max_tokens,
+                base_prompt_tokens=estimate_tokens(build_system_prompt(today, names)),
+                tool_tokens=tools_tokens(all_tools.specs),
+            )
+            logger.info("Chat budget: %s", budget)
+            digest = TrainingDigest(
+                names, repository, repository, routine_repository, datetime.now
+            )
+            agent = ChatAgent(
+                llm,
+                all_tools if budget.tools_enabled else ToolRegistry([]),
+                system_prompt=lambda: build_system_prompt(
+                    datetime.now().date(), names, digest.text(budget.digest_chars),
+                    tools=budget.tools_enabled,
+                ),
+                max_tool_steps=llm_settings.max_tool_steps,
+                max_tool_chars=budget.tool_result_chars,
+                max_history_turns=llm_settings.max_history_turns,
+                context_tokens=budget.context_tokens,
+                reply_tokens=budget.reply_tokens,
+            )
+            chat_view = ChatView(agent, f"{llm_settings.model} · {llm_settings.base_url}")
             presenter = TrainingPresenter(
                 controller,
                 frame_buffer,
@@ -122,6 +173,7 @@ def main() -> int:
                 RoutinesView(routines),
                 history_view,
                 ProgressView(progress),
+                chat_view,
             )
             window.show()
             window.start_capture()
